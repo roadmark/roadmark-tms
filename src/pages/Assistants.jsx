@@ -96,7 +96,7 @@ export default function Assistants() {
       <div className="page-head">
         <h2>Assistants</h2>
         <div className="spacer" />
-        <span className="chip yellow">Telegram bots go live in Phase 13 — playbooks below are final</span>
+        <a className="btn btn-ghost" href="/admin/assistants">Telegram setup</a>
       </div>
 
       <div className="grid cols-2" style={{ marginBottom: 20 }}>

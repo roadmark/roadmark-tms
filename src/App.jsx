@@ -17,6 +17,7 @@ import TrackTrace from './pages/tracking/TrackTrace';
 import Assistants from './pages/Assistants';
 import Admin from './pages/admin/Admin';
 import Integrations from './pages/admin/Integrations';
+import AssistantsAdmin from './pages/admin/AssistantsAdmin';
 
 const qc = new QueryClient({
   defaultOptions: { queries: { staleTime: 15_000, retry: 1, placeholderData: (p) => p } },
@@ -63,6 +64,7 @@ export default function App() {
               <Route path="/assistants" element={<Assistants />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/integrations" element={<Integrations />} />
+              <Route path="/admin/assistants" element={<AssistantsAdmin />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

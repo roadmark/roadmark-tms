@@ -27,6 +27,7 @@ const NAV = [
   { section: 'Admin', items: [
     { to: '/admin', label: 'Company & Users' },
     { to: '/admin/integrations', label: 'ELD & Integrations' },
+    { to: '/admin/assistants', label: 'Telegram setup' },
   ]},
 ];
 
@@ -34,7 +35,7 @@ const TITLES = {
   '/': 'Overview', '/dispatch/loads': 'Loads', '/dispatch/customers': 'Customers',
   '/tracking': 'Track & Trace', '/accounting': 'Accounting', '/safety/drivers': 'Drivers', '/safety/compliance': 'Compliance', '/safety/insurance': 'Insurance',
   '/fleet/units': 'Trucks & Trailers', '/fleet/assignments': 'Assignments', '/maintenance': 'Maintenance',
-  '/assistants': 'Assistants', '/admin': 'Company & Users', '/admin/integrations': 'ELD & Integrations',
+  '/assistants': 'Assistants', '/admin': 'Company & Users', '/admin/integrations': 'ELD & Integrations', '/admin/assistants': 'Telegram setup',
 };
 
 export default function Layout() {
