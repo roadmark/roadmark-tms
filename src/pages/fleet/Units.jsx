@@ -5,12 +5,14 @@ import { useAuth } from '../../app/AuthProvider';
 import { Drawer, Field, Empty, ErrorNote, Chip } from '../../components/ui';
 import { UNIT_STATUSES, OWNERSHIP, TRUCK_TYPES, TRAILER_TYPES } from '../../data/enums';
 import DeptFeed from '../../components/DeptFeed';
+import ImportWizard from '../accounting/ImportWizard';
 
 export default function Units() {
   const { companyId, canEdit, user } = useAuth();
   const qc = useQueryClient();
   const [tab, setTab] = useState('trucks');
   const [open, setOpen] = useState(null);
+  const [importing, setImporting] = useState(false);
   const table = tab; // 'trucks' | 'trailers'
 
   const units = useQuery({
@@ -36,6 +38,7 @@ export default function Units() {
         <button className={`btn ${tab === 'trucks' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('trucks')}>Trucks</button>
         <button className={`btn ${tab === 'trailers' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('trailers')}>Trailers</button>
         <div className="spacer" />
+        {editable && <button className="btn btn-ghost" onClick={() => setImporting(true)}>Import CSV</button>}
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add {tab.slice(0, -1)}</button>}
       </div>
       <ErrorNote error={units.error} />
@@ -59,6 +62,8 @@ export default function Units() {
         {units.data?.length === 0 && <Empty head={`No ${tab} yet`} sub="Fleet adds units here; dispatch assigns drivers to them." />}
       </div>
       <DeptFeed dept="fleet" />
+      {importing && <ImportWizard kind={table} onClose={() => setImporting(false)}
+        onDone={() => qc.invalidateQueries({ queryKey: [table] })} />}
       {open && <UnitDrawer table={table} row={open === 'new' ? null : open} onClose={() => setOpen(null)}
         companyId={companyId} userId={user?.id}
         onSaved={() => { setOpen(null); qc.invalidateQueries({ queryKey: [table] }); }} />}

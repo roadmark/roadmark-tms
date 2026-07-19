@@ -95,3 +95,41 @@ export const TOLL_FIELDS = [
   { key: 'plaza_name', label: 'Plaza / exit', synonyms: ['plaza', 'exit', 'location', 'facility', 'agency'], required: false },
   { key: 'amount', label: 'Amount', synonyms: ['toll', 'total', 'charge', 'tollamount'], required: true },
 ];
+
+export const DRIVER_FIELDS = [
+  { key: 'full_name', label: 'Full name', synonyms: ['name', 'driver', 'drivername', 'employee'], required: true },
+  { key: 'phone', label: 'Phone', synonyms: ['phone number', 'mobile', 'cell', 'telephone'] },
+  { key: 'email', label: 'Email', synonyms: ['e-mail', 'mail'] },
+  { key: 'ssn', label: 'SSN (identity key)', synonyms: ['social', 'ssn', 'social security'] },
+  { key: 'status', label: 'Status', synonyms: ['driver status', 'state'] },
+  { key: 'driver_type', label: 'Type', synonyms: ['drivertype', 'category', 'classification'] },
+  { key: 'cdl_number', label: 'CDL number', synonyms: ['cdl', 'license', 'licensenumber'] },
+  { key: 'cdl_state', label: 'CDL state', synonyms: ['licensestate', 'cdlstate'] },
+  { key: 'pay_rate', label: 'Pay rate', synonyms: ['rate', 'percentage', 'permile', 'pay'] },
+  { key: 'hire_date', label: 'Hire date', synonyms: ['start date', 'hired', 'orientation'] },
+];
+
+export const TRUCK_FIELDS = [
+  { key: 'unit_number', label: 'Unit number', synonyms: ['unit', 'truck', 'number', 'truck number', 'unit #'], required: true },
+  { key: 'vin', label: 'VIN', synonyms: ['vin number', 'serial'] },
+  { key: 'make', label: 'Make', synonyms: ['manufacturer', 'brand'] },
+  { key: 'model', label: 'Model', synonyms: [] },
+  { key: 'year', label: 'Year', synonyms: ['model year'] },
+  { key: 'ownership', label: 'Ownership', synonyms: ['owned', 'owner type'] },
+  { key: 'status', label: 'Status', synonyms: ['unit status', 'state'] },
+  { key: 'plate', label: 'Plate', synonyms: ['license plate', 'tag', 'plate number'] },
+  { key: 'plate_state', label: 'Plate state', synonyms: ['registration state', 'platestate'] },
+  { key: 'leasor', label: 'Leasor', synonyms: ['lessor', 'lease company'] },
+];
+
+export const CUSTOMER_FIELDS = [
+  { key: 'name', label: 'Name', synonyms: ['customer', 'broker', 'company', 'customername'], required: true },
+  { key: 'mc_number', label: 'MC number', synonyms: ['mc', 'mc#', 'motor carrier'] },
+  { key: 'phone', label: 'Phone', synonyms: ['telephone', 'contact'] },
+  { key: 'email', label: 'Email', synonyms: ['e-mail'] },
+  { key: 'billing_email', label: 'Billing email', synonyms: ['ap email', 'invoice email', 'accounting email'] },
+  { key: 'payment_terms_days', label: 'Payment terms (days)', synonyms: ['terms', 'net', 'paymentterms'] },
+  { key: 'address', label: 'Address', synonyms: ['street'] },
+  { key: 'city', label: 'City', synonyms: [] },
+  { key: 'state', label: 'State', synonyms: ['st'] },
+];

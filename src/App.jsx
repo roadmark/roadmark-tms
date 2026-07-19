@@ -5,6 +5,8 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Loads from './pages/dispatch/Loads';
+import Board from './pages/dispatch/Board';
+import TripActivity from './pages/dispatch/TripActivity';
 import Customers from './pages/dispatch/Customers';
 import Drivers from './pages/safety/Drivers';
 import Compliance from './pages/safety/Compliance';
@@ -52,6 +54,8 @@ export default function App() {
             <Route element={<Gate />}>
               <Route path="/" element={<Overview />} />
               <Route path="/dispatch/loads" element={<Loads />} />
+              <Route path="/dispatch/board" element={<Board />} />
+              <Route path="/dispatch/activity" element={<TripActivity />} />
               <Route path="/dispatch/customers" element={<Customers />} />
               <Route path="/safety/drivers" element={<Drivers />} />
               <Route path="/safety/compliance" element={<Compliance />} />

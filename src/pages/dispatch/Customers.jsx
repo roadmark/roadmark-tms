@@ -3,11 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../app/AuthProvider';
 import { Drawer, Field, Empty, ErrorNote, Chip } from '../../components/ui';
+import ImportWizard from '../accounting/ImportWizard';
 
 export default function Customers() {
   const { companyId, canEdit, user } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(null);
+  const [importing, setImporting] = useState(false);
 
   const customers = useQuery({
     queryKey: ['customers', companyId],
@@ -28,6 +30,7 @@ export default function Customers() {
       <div className="page-head">
         <h2>Customers &amp; brokers</h2>
         <div className="spacer" />
+        {editable && <button className="btn btn-ghost" onClick={() => setImporting(true)}>Import CSV</button>}
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add customer</button>}
       </div>
       <ErrorNote error={customers.error} />
@@ -49,6 +52,8 @@ export default function Customers() {
         </table>
         {customers.data?.length === 0 && <Empty head="No customers yet" sub="Add the brokers and shippers you haul for." />}
       </div>
+      {importing && <ImportWizard kind="customers" onClose={() => setImporting(false)}
+        onDone={() => qc.invalidateQueries({ queryKey: ['customers'] })} />}
       {open && <CustomerDrawer row={open === 'new' ? null : open} onClose={() => setOpen(null)}
         companyId={companyId} userId={user?.id}
         onSaved={() => { setOpen(null); qc.invalidateQueries({ queryKey: ['customers'] }); }} />}

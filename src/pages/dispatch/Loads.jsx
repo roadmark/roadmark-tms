@@ -7,7 +7,7 @@ import { Chip, Drawer, Field, Empty, ErrorNote } from '../../components/ui';
 import { LOAD_STATUSES } from '../../data/enums';
 import { money, dt } from '../../lib/format';
 
-const LOAD_COLS = `id, load_number, status, customer_load_id, pickup_time, delivery_time,
+const LOAD_COLS = `id, load_number, status, customer_load_id, dispatcher_id, pickup_time, delivery_time,
   pickup_location, delivery_location, loaded_miles, empty_miles, total_miles,
   freight_amount, driver_rate, weight_lbs, notes,
   customer:customers(id, name),
@@ -233,6 +233,7 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
     status: load?.status || 'scheduled',
     customer_id: load?.customer?.id || '',
     customer_load_id: load?.customer_load_id || prefill?.customer_load_id || '',
+    dispatcher_id: load?.dispatcher_id || userId || '',
     driver_id: load?.driver?.id || '',
     truck_id: load?.truck?.id || '',
     trailer_id: load?.trailer?.id || '',
@@ -254,14 +255,16 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
   const opts = useQuery({
     queryKey: ['load-options', cid],
     queryFn: async () => {
-      const [c, dr, t, tr] = await Promise.all([
+      const [c, dr, t, tr, mem] = await Promise.all([
         supabase.from('customers').select('id,name').eq('company_id', cid).order('name'),
         supabase.from('drivers').select('id,full_name').eq('company_id', cid).in('status', ['active', 'ready']).order('full_name'),
         supabase.from('trucks').select('id,unit_number').eq('company_id', cid).order('unit_number'),
         supabase.from('trailers').select('id,unit_number').eq('company_id', cid).order('unit_number'),
+        supabase.from('company_members').select('user_id, profiles(full_name, email)').eq('company_id', cid),
       ]);
       for (const r of [c, dr, t, tr]) if (r.error) throw r.error;
-      return { customers: c.data, drivers: dr.data, trucks: t.data, trailers: tr.data };
+      return { customers: c.data, drivers: dr.data, trucks: t.data, trailers: tr.data,
+        members: (mem.data || []).map((m) => ({ id: m.user_id, name: m.profiles?.full_name || m.profiles?.email || 'user' })) };
     },
   });
 
@@ -322,6 +325,7 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
         status: f.status,
         customer_id: f.customer_id || null,
         customer_load_id: f.customer_load_id || null,
+        dispatcher_id: f.dispatcher_id || null,
         driver_id: f.driver_id || null,
         truck_id: f.truck_id || null,
         trailer_id: f.trailer_id || null,
@@ -413,6 +417,12 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
           <input value={f.customer_load_id} onChange={set('customer_load_id')} placeholder="M-28143" />
         </Field>
       </div>
+      <Field label="Dispatcher">
+        <select value={f.dispatcher_id} onChange={set('dispatcher_id')}>
+          <option value="">—</option>
+          {(opts.data?.members || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+      </Field>
       <Field label="Customer (broker)">
         <select value={f.customer_id} onChange={set('customer_id')}>
           <option value="">—</option>

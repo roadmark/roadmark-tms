@@ -5,11 +5,13 @@ import { useAuth } from '../../app/AuthProvider';
 import { Drawer, Field, Empty, ErrorNote, Chip } from '../../components/ui';
 import { DRIVER_STATUSES, DRIVER_TYPES, PAY_TYPES } from '../../data/enums';
 import DeptFeed from '../../components/DeptFeed';
+import ImportWizard from '../accounting/ImportWizard';
 
 export default function Drivers() {
   const { companyId, canEdit, user } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(null);
+  const [importing, setImporting] = useState(false);
 
   const drivers = useQuery({
     queryKey: ['drivers', companyId],
@@ -30,6 +32,7 @@ export default function Drivers() {
       <div className="page-head">
         <h2>Drivers</h2>
         <div className="spacer" />
+        {editable && <button className="btn btn-ghost" onClick={() => setImporting(true)}>Import CSV</button>}
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add driver</button>}
       </div>
       <ErrorNote error={drivers.error} />
@@ -58,6 +61,8 @@ export default function Drivers() {
 
       <DeptFeed dept="safety" title="Safety — assistant activity" />
 
+      {importing && <ImportWizard kind="drivers" onClose={() => setImporting(false)}
+        onDone={() => qc.invalidateQueries({ queryKey: ['drivers'] })} />}
       {open && <DriverDrawer row={open === 'new' ? null : open} onClose={() => setOpen(null)}
         companyId={companyId} userId={user?.id}
         onSaved={() => { setOpen(null); qc.invalidateQueries({ queryKey: ['drivers'] }); }} />}

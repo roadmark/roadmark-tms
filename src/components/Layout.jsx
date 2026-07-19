@@ -1,12 +1,15 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../app/AuthProvider';
+import GlobalSearch from './GlobalSearch';
 import { DEPT_COLORS } from '../data/permissions';
 import { title } from '../lib/format';
 
 const NAV = [
   { section: 'Operate', items: [
     { to: '/', label: 'Overview', end: true },
+    { to: '/dispatch/board', label: 'Board', dept: 'dispatch' },
     { to: '/dispatch/loads', label: 'Loads', dept: 'dispatch' },
+    { to: '/dispatch/activity', label: 'Trip activity', dept: 'dispatch' },
     { to: '/dispatch/customers', label: 'Customers', dept: 'dispatch' },
     { to: '/tracking', label: 'Track & Trace', dept: 'tracking' },
   ]},
@@ -32,7 +35,7 @@ const NAV = [
 ];
 
 const TITLES = {
-  '/': 'Overview', '/dispatch/loads': 'Loads', '/dispatch/customers': 'Customers',
+  '/': 'Overview', '/dispatch/loads': 'Loads', '/dispatch/board': 'Dispatch board', '/dispatch/activity': 'Trip activity', '/dispatch/customers': 'Customers',
   '/tracking': 'Track & Trace', '/accounting': 'Accounting', '/safety/drivers': 'Drivers', '/safety/compliance': 'Compliance', '/safety/insurance': 'Insurance',
   '/fleet/units': 'Trucks & Trailers', '/fleet/assignments': 'Assignments', '/maintenance': 'Maintenance',
   '/assistants': 'Assistants', '/admin': 'Company & Users', '/admin/integrations': 'ELD & Integrations', '/admin/assistants': 'Telegram setup',
@@ -75,6 +78,7 @@ export default function Layout() {
         <div className="topbar">
           <h1>{TITLES[loc.pathname] || 'Roadmark TMS'}</h1>
           <div className="spacer" />
+          <GlobalSearch />
           <select
             className="company-switch"
             value={companyId || ''}
