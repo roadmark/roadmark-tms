@@ -53,8 +53,11 @@ const toKind = (v: unknown, fallback: string) => {
   return KIND_MAP[k] ?? KIND_MAP[k.replace(/_/g, ' ')] ?? fallback;
 };
 
-/** Ownership words that say nothing about what the shop does. */
-const OWNERSHIP_WORDS = new Set(['chain', 'independent', 'community', 'franchise', 'mechanic', 'shop']);
+/** Roadmark's shop_type IS the grouping: 'chain' is a truck-stop brand,
+    everything else belongs on the ★ Recommended list. */
+const CHAIN_TYPES = new Set(['chain', 'franchise']);
+const RECOMMENDED_TYPES = new Set(['independent', 'mechanic', 'community', 'local']);
+const OWNERSHIP_WORDS = new Set([...CHAIN_TYPES, ...RECOMMENDED_TYPES, 'shop']);
 
 /** A shop's real speciality decides the pin: tyres, towing, mobile, dealer — else repair. */
 function kindFromSpecialties(list: string[] | null, shopType: unknown, fallback: string) {
@@ -87,9 +90,16 @@ function normalize(row: Record<string, any>, kind: string) {
   return {
     source: 'roadmark',
     external_id: String(row.id ?? row.uuid ?? row.place_id ?? ''),
-    kind: row.kind ?? row.category
-      ? toKind(row.kind ?? row.category, kind)
-      : kindFromSpecialties(services, row.shop_type, kind),
+    // chains are truck stops; independents keep their speciality (tyres, towing, repair…)
+    kind: (() => {
+      const st = String(row.shop_type ?? '').toLowerCase().trim();
+      if (CHAIN_TYPES.has(st)) return 'truck_stop';
+      if (row.kind ?? row.category) return toKind(row.kind ?? row.category, kind);
+      return kindFromSpecialties(services, row.shop_type, kind);
+    })(),
+    shop_type: row.shop_type ?? null,
+    brand: row.brand ?? null,
+    is_recommended: RECOMMENDED_TYPES.has(String(row.shop_type ?? '').toLowerCase().trim()),
     name: row.name ?? row.title ?? row.business_name ?? 'Unnamed',
     lat, lng,
     address: row.address ?? row.street ?? row.address_line1 ?? null,

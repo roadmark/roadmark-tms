@@ -529,3 +529,21 @@ table.data tfoot td { font-weight: 700; background: var(--surface-2); border-bot
 }
 .note-num { font-size: 11px; color: var(--accent); cursor: pointer; }
 .note-num:hover { text-decoration: underline; }
+
+/* ---------------- map layer panel ---------------- */
+.layer-panel {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 8px; width: 268px;
+  max-height: 460px; overflow-y: auto; box-shadow: var(--shadow);
+}
+.layer-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 7px; cursor: pointer; font-size: 13px;
+}
+.layer-row:hover { background: var(--surface-2); }
+.layer-row.head { border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 4px; }
+.layer-row.sub { padding-left: 26px; font-size: 12px; color: var(--text-2); }
+.layer-row .swatch { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.layer-row .swatch.small { width: 7px; height: 7px; }
+.layer-row .num { font-size: 11.5px; color: var(--text-3); }
+.layer-divider { height: 1px; background: var(--line); margin: 6px 4px; }

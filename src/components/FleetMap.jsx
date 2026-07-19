@@ -2,16 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+// colours follow Roadmark's own map legend
 export const PLACE_STYLE = {
-  repair_shop:       { icon: '🔧', color: '#f2a93b', label: 'Repair shop' },
-  mobile_repair:     { icon: '🚐', color: '#f2a93b', label: 'Mobile repair' },
-  dealer:            { icon: '🏬', color: '#60a5fa', label: 'Dealer' },
-  tire_shop:         { icon: '🛞', color: '#a78bfa', label: 'Tire shop' },
-  towing:            { icon: '🪝', color: '#f87171', label: 'Towing' },
-  parking:           { icon: '🅿', color: '#34d399', label: 'Parking' },
-  truck_stop:        { icon: '⛽', color: '#22d3ee', label: 'Truck stop' },
-  weigh_station:     { icon: '⚖', color: '#98a2ae', label: 'Weigh station' },
-  fuel:              { icon: '⛽', color: '#22d3ee', label: 'Fuel' },
+  repair_shop:       { icon: '🔧', color: '#f2a93b', label: 'General repair' },
+  mobile_repair:     { icon: '🚐', color: '#f2a93b', label: 'Mobile / roadside' },
+  dealer:            { icon: '🏬', color: '#f2a93b', label: 'Dealer' },
+  tire_shop:         { icon: '🛞', color: '#f2a93b', label: 'Tires' },
+  towing:            { icon: '🪝', color: '#f2a93b', label: 'Towing' },
+  parking:           { icon: '🅿', color: '#3b82f6', label: 'Parking' },
+  truck_stop:        { icon: '⛽', color: '#ef4444', label: 'Truck stop' },
+  weigh_station:     { icon: '⚖', color: '#a855f7', label: 'Weigh station' },
+  cat_scale:         { icon: '⚖', color: '#eab308', label: 'CAT scale' },
+  fuel:              { icon: '⛽', color: '#ef4444', label: 'Fuel' },
   yard:              { icon: '🏠', color: '#a78bfa', label: 'Our yard' },
   customer_facility: { icon: '🏭', color: '#60a5fa', label: 'Customer facility' },
   dropped_trailer:   { icon: '📦', color: '#f2a93b', label: 'Dropped trailer' },
@@ -85,17 +87,20 @@ export default function FleetMap({
     visible.forEach((p) => {
       if (typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
       const st = PLACE_STYLE[p.kind] || PLACE_STYLE.other;
-      const ring = p.company_id ? '#f2a93b' : 'rgba(255,255,255,.65)';
+      const rec = p.is_recommended;
+      const ring = p.company_id ? '#f2a93b' : rec ? '#fde68a' : 'rgba(255,255,255,.5)';
+      const size = rec || p.company_id ? 26 : 22;
       const icon = L.divIcon({
         className: '',
-        html: `<div style="width:24px;height:24px;border-radius:50%;background:${st.color};
-               display:grid;place-items:center;font-size:12px;border:2px solid ${ring};
-               box-shadow:0 2px 6px rgba(0,0,0,.45)">${st.icon}</div>`,
-        iconSize: [24, 24], iconAnchor: [12, 12],
+        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${st.color};
+               display:grid;place-items:center;font-size:${rec ? 13 : 11}px;
+               border:2px solid ${ring};box-shadow:0 2px 6px rgba(0,0,0,.45)">${rec ? '★' : st.icon}</div>`,
+        iconSize: [size, size], iconAnchor: [size / 2, size / 2],
       });
       const m = L.marker([p.lat, p.lng], { icon }).addTo(layer);
       m.bindPopup(
-        `<b>${p.name}</b><br/><span style="color:#8b95a5">${st.label}` +
+        `<b>${p.name}</b><br/><span style="color:#8b95a5">${rec ? '★ Recommended · ' : ''}${
+          p.brand ? p.brand + ' · ' : ''}${st.label}` +
         (p.preferred ? ' · preferred' : '') + (p.blacklisted ? ' · do not use' : '') + '</span>' +
         (p.address || p.city ? `<br/>${[p.address, p.city, p.state].filter(Boolean).join(', ')}` : '') +
         (p.phone ? `<br/>${p.phone}` : '') +

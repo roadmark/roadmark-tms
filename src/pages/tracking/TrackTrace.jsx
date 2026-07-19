@@ -5,6 +5,7 @@ import { useAuth } from '../../app/AuthProvider';
 import { Chip, Drawer, Field, Empty, ErrorNote } from '../../components/ui';
 import { ago, dt, title } from '../../lib/format';
 import FleetMap, { PLACE_STYLE } from '../../components/FleetMap';
+import MapLayers from '../../components/MapLayers';
 import DeptFeed from '../../components/DeptFeed';
 
 const DIRECTORY = ['repair_shop', 'mobile_repair', 'dealer', 'tire_shop', 'towing', 'truck_stop', 'parking', 'weigh_station'];
@@ -17,9 +18,11 @@ export default function LiveMap() {
   const [place, setPlace] = useState(null);
   const [dropMode, setDropMode] = useState(false);
   const [newPin, setNewPin] = useState(null);
-  const [layers, setLayers] = useState({ trucks: true, directory: true, ours: true, preferredOnly: false });
-  const [kinds, setKinds] = useState(null);        // null = all
-  const [kindMenu, setKindMenu] = useState(false);
+  const [filter, setFilter] = useState({
+    trucks: true, ours: true, recommended: true, stops: true,
+    brands: null, kinds: null, preferredOnly: false,
+  });
+  const [layersOpen, setLayersOpen] = useState(false);
   const [viewInfo, setViewInfo] = useState(null);
   const [syncMsg, setSyncMsg] = useState(null);
 
@@ -91,38 +94,28 @@ export default function LiveMap() {
   });
 
   const shown = useMemo(() => {
-    let list = places.data || [];
-    list = list.filter((p) => {
-      const isOurs = !!p.company_id;
-      if (isOurs && !layers.ours) return false;
-      if (!isOurs && !layers.directory) return false;
-      if (!isOurs && layers.preferredOnly && !p.preferred) return false;
-      if (p.blacklisted && !layers.ours) return false;
-      if (kinds && !kinds.has(p.kind)) return false;
-      return true;
+    return (places.data || []).filter((p) => {
+      if (p.company_id) return filter.ours;
+      if (filter.preferredOnly && !p.preferred) return false;
+      if (p.blacklisted) return false;
+      if (p.is_recommended) return filter.recommended;
+      if (p.kind === 'truck_stop') {
+        if (!filter.stops) return false;
+        if (filter.brands) return filter.brands.has(p.brand?.trim() || 'Other truck stops');
+        return true;
+      }
+      return !filter.kinds || filter.kinds.has(p.kind);
     });
-    return list;
-  }, [places.data, layers, kinds]);
-
-  // what kinds actually exist, with counts
-  const kindCounts = useMemo(() => {
-    const m = {};
-    (places.data || []).forEach((p) => { m[p.kind] = (m[p.kind] || 0) + 1; });
-    return Object.entries(m).sort((a, b) => b[1] - a[1]);
-  }, [places.data]);
-  const toggleKind = (k) => {
-    setKinds((cur) => {
-      const all = new Set(kindCounts.map(([x]) => x));
-      const next = new Set(cur ?? all);
-      if (next.has(k)) next.delete(k); else next.add(k);
-      return next.size === all.size ? null : next;
-    });
-  };
+  }, [places.data, filter]);
 
   const positioned = fleet.data?.positioned || [];
   const silent = fleet.data?.silent || [];
   const moving = positioned.filter((p) => Number(p.speed_mph) > 5).length;
   const ourPins = (places.data || []).filter((p) => p.company_id);
+  const dir = (places.data || []).filter((p) => !p.company_id);
+  const recCount = dir.filter((p) => p.is_recommended).length;
+  const stopCount = dir.filter((p) => p.kind === 'truck_stop').length;
+  const parkCount = dir.filter((p) => p.kind === 'parking').length;
 
   return (
     <>
@@ -140,10 +133,6 @@ export default function LiveMap() {
       </div>
 
       <div className="filter-row">
-        <Toggle on={layers.trucks} set={(v) => setLayers((l) => ({ ...l, trucks: v }))} label="Trucks" />
-        <Toggle on={layers.directory} set={(v) => setLayers((l) => ({ ...l, directory: v }))} label="Roadmark directory" />
-        <Toggle on={layers.ours} set={(v) => setLayers((l) => ({ ...l, ours: v }))} label="Our pins" />
-        <Toggle on={layers.preferredOnly} set={(v) => setLayers((l) => ({ ...l, preferredOnly: v }))} label="Preferred only" />
         <div style={{ flex: 1 }} />
         <span className="small muted">
           Directory synced {syncState.data?.last_synced_at ? ago(syncState.data.last_synced_at) : 'never'}
@@ -162,7 +151,7 @@ export default function LiveMap() {
 
       <div style={{ marginBottom: 14 }}>
         <FleetMap
-          trucks={layers.trucks ? positioned : []}
+          trucks={filter.trucks ? positioned : []}
           places={shown}
           onSelectTruck={setSelected}
           onSelectPlace={setPlace}
@@ -174,48 +163,21 @@ export default function LiveMap() {
 
       <div className="filter-row" style={{ marginBottom: 16 }}>
         <div style={{ position: 'relative' }}>
-          <button className="btn btn-ghost" onClick={() => setKindMenu((v) => !v)}>
-            ☰ Pin types {kinds ? `(${kinds.size} of ${kindCounts.length})` : `(all ${kindCounts.length})`}
-          </button>
-          {kindMenu && (
+          <button className={`btn ${layersOpen ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setLayersOpen((v) => !v)}>☰ Layers</button>
+          {layersOpen && (
             <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 30 }} onClick={() => setKindMenu(false)} />
-              <div className="card" style={{ position: 'absolute', top: 40, left: 0, width: 268,
-                zIndex: 31, padding: 10, maxHeight: 380, overflowY: 'auto' }}>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                  <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
-                    onClick={() => setKinds(null)}>All</button>
-                  <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
-                    onClick={() => setKinds(new Set())}>None</button>
-                </div>
-                {kindCounts.map(([k, n]) => {
-                  const st = PLACE_STYLE[k] || PLACE_STYLE.other;
-                  const on = !kinds || kinds.has(k);
-                  return (
-                    <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '6px 4px', cursor: 'pointer', fontSize: 13 }}>
-                      <input type="checkbox" checked={on} onChange={() => toggleKind(k)} />
-                      <span style={{ width: 20 }}>{st.icon}</span>
-                      <span style={{ flex: 1 }}>{st.label}</span>
-                      <b className="num" style={{ fontSize: 12 }}>{n.toLocaleString()}</b>
-                    </label>
-                  );
-                })}
-                {kindCounts.length === 0 && <div className="small muted">No pins yet — run the sync.</div>}
+              <div style={{ position: 'fixed', inset: 0, zIndex: 30 }} onClick={() => setLayersOpen(false)} />
+              <div style={{ position: 'absolute', top: 40, left: 0, zIndex: 31 }}>
+                <MapLayers places={places.data || []} filter={filter} setFilter={setFilter}
+                  truckCount={positioned.length} ourCount={ourPins.length} />
               </div>
             </>
           )}
         </div>
-        {kindCounts.slice(0, 6).map(([k, n]) => {
-          const st = PLACE_STYLE[k] || PLACE_STYLE.other;
-          const on = !kinds || kinds.has(k);
-          return (
-            <span key={k} className={`chip ${on ? 'amber' : 'gray'} nodot`}
-              style={{ gap: 6, cursor: 'pointer' }} onClick={() => toggleKind(k)}>
-              <span>{st.icon}</span>{st.label} <b>{n.toLocaleString()}</b>
-            </span>
-          );
-        })}
+        <span className="chip amber nodot" style={{ gap: 6 }}>★ Recommended <b>{recCount.toLocaleString()}</b></span>
+        <span className="chip red nodot" style={{ gap: 6 }}>⛽ Truck stops <b>{stopCount.toLocaleString()}</b></span>
+        <span className="chip blue nodot" style={{ gap: 6 }}>🅿 Parking <b>{parkCount.toLocaleString()}</b></span>
         <div style={{ flex: 1 }} />
         {viewInfo && (
           <span className="small muted">
