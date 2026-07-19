@@ -71,18 +71,21 @@ export default function Layout() {
   const { membership, memberships, companyId, setCompanyId, user, signOut } = useAuth();
   const loc = useLocation();
   const [theme, setTheme] = useTheme();
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('rtms.nav') === 'min');
+  useEffect(() => { localStorage.setItem('rtms.nav', collapsed ? 'min' : 'full'); }, [collapsed]);
   const initial = (user?.email || '?')[0].toUpperCase();
 
   return (
     <div className="frame">
-      <aside className="sidebar">
+      <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
         <div className="brand">
-          R<span className="dot" />admark <span className="sub">TMS</span>
+          R<span className="dot" />
+          <span className="hide-collapsed">admark <span className="sub">TMS</span></span>
         </div>
 
         <div className="who-card">
           <div className="who-avatar">{initial}</div>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0 }} className="hide-collapsed">
             <div className="who-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {user?.email?.split('@')[0]}
             </div>
@@ -95,14 +98,13 @@ export default function Layout() {
         <nav className="nav">
           {NAV.map((s) => (
             <div key={s.section}>
-              {s.section && <div className="nav-section">{s.section}</div>}
+              {s.section && <div className="nav-section hide-collapsed">{s.section}</div>}
               {s.items.map((i) => (
                 <NavLink key={i.to} to={i.to} end={i.end}
                   className={({ isActive }) => (isActive ? 'active' : '')}>
-                  {i.dept
-                    ? <span className="dept-dot" style={{ background: DEPT_COLORS[i.dept] }} />
-                    : <span className="dept-dot" style={{ background: 'var(--text-3)' }} />}
-                  {i.label}
+                  <span className="dept-dot"
+                    style={{ background: i.dept ? DEPT_COLORS[i.dept] : 'var(--text-3)' }} />
+                  <span className="hide-collapsed">{i.label}</span>
                 </NavLink>
               ))}
             </div>
@@ -110,7 +112,10 @@ export default function Layout() {
         </nav>
 
         <div className="sidebar-foot">
-          <button onClick={signOut}>Sign out</button>
+          <button onClick={() => setCollapsed((v) => !v)} title="Collapse menu">
+            {collapsed ? '»' : '« Collapse'}
+          </button>
+          <button onClick={signOut}>{collapsed ? '⏻' : 'Sign out'}</button>
         </div>
       </aside>
 
@@ -119,17 +124,22 @@ export default function Layout() {
           <h1>{TITLES[loc.pathname] || 'Roadmark TMS'}</h1>
           <div className="spacer" />
           <GlobalSearch />
-          <button className="icon-btn" title="Switch theme"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
+          <div className="theme-pill">
+            <button className={theme === 'light' ? 'on' : ''} title="Light"
+              onClick={() => setTheme('light')}>☀</button>
+            <button className={theme === 'dark' ? 'on' : ''} title="Dark"
+              onClick={() => setTheme('dark')}>☾</button>
+          </div>
           <Notifications />
-          <select className="company-switch" value={companyId || ''}
-            onChange={(e) => setCompanyId(e.target.value)} aria-label="Active company">
-            {memberships.map((m) => (
-              <option key={m.company_id} value={m.company_id}>{m.companies?.name}</option>
-            ))}
-          </select>
+          <div className="company-chip">
+            <select value={companyId || ''} onChange={(e) => setCompanyId(e.target.value)}
+              aria-label="Active company">
+              {memberships.map((m) => (
+                <option key={m.company_id} value={m.company_id}>{m.companies?.name}</option>
+              ))}
+            </select>
+            <span className="who-avatar" style={{ width: 24, height: 24, fontSize: 11 }}>{initial}</span>
+          </div>
         </div>
         <div className="content"><Outlet /></div>
       </div>

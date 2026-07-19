@@ -6,6 +6,7 @@ import { useAuth } from '../../app/AuthProvider';
 import { Chip, Drawer, Field, Empty, ErrorNote } from '../../components/ui';
 import { ago, money, title } from '../../lib/format';
 import DeptFeed from '../../components/DeptFeed';
+import PageHead, { Pills } from '../../components/PageHead';
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 const STATUSES = ['created', 'diagnostics', 'awaiting_approval', 'repair', 'resolved', 'closed', 'cancelled'];
@@ -81,32 +82,30 @@ export default function Cases() {
 
   return (
     <>
-      <div className="page-head">
-        <h2>Cases</h2>
+      <PageHead title="Cases" stats={[
+        { v: counts.open, l: 'open' },
+        { v: counts.down, l: 'units down' },
+        { v: counts.byPriority.critical, l: 'critical' },
+        { v: counts.closed, l: 'resolved' },
+      ]}>
         <div className="seg">
           <button className={view === 'board' ? 'on' : ''} onClick={() => setView('board')}>Board</button>
           <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}>List</button>
         </div>
-        <div className="spacer" />
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>+ New case</button>}
-      </div>
+      </PageHead>
 
-      <div className="grid cols-5" style={{ marginBottom: 14 }}>
-        <Kpi label="Open cases" v={counts.open} />
-        <Kpi label="Units down" v={counts.down} tone="var(--danger)" />
-        <Kpi label="Critical" v={counts.byPriority.critical} tone="var(--danger)" />
-        <Kpi label="High" v={counts.byPriority.high} tone="var(--warn)" />
-        <Kpi label="Resolved" v={counts.closed} tone="var(--ok)" />
-      </div>
+      <Pills value={scope} onChange={setScope} options={[
+        { id: 'open', label: 'Open', n: counts.open },
+        { id: 'down', label: 'Units down', n: counts.down },
+        { id: 'closed', label: 'Resolved', n: counts.closed },
+        { id: '', label: 'All' },
+      ]} />
 
       <div className="filter-row">
-        {[['open', 'Open'], ['down', 'Units down'], ['closed', 'Resolved / closed'], ['', 'All']].map(([v, l]) => (
-          <span key={v || 'all'} className={`chip gray nodot ${scope === v ? 'on' : ''}`}
-            onClick={() => setScope(v)}>{l}</span>
-        ))}
-        <span style={{ width: 12 }} />
         {PRIORITIES.map((p) => (
           <span key={p} className={`chip ${PRIORITY_CHIP[p]} ${priority === p ? 'on' : ''}`}
+            style={{ cursor: 'pointer' }}
             onClick={() => setPriority(priority === p ? '' : p)}>{p}</span>
         ))}
         <div style={{ flex: 1 }} />

@@ -7,6 +7,7 @@ import { Chip, Drawer, Field, Empty, ErrorNote } from '../../components/ui';
 import { LOAD_STATUSES } from '../../data/enums';
 import BrokerEmail from '../../components/BrokerEmail';
 import { useLoadDocChips, DocChips } from '../../components/ChipStrips';
+import PageHead from '../../components/PageHead';
 import { money, dt } from '../../lib/format';
 
 const LOAD_COLS = `id, load_number, status, customer_load_id, dispatcher_id, pickup_time, delivery_time,
@@ -43,23 +44,21 @@ export default function Loads() {
 
   return (
     <>
-      <div className="page-head">
-        <h2>Loads</h2>
+      <PageHead title="Loads" stats={[{ v: loads.data?.length ?? 0, l: 'in view' }]}>
         <select className="company-switch" value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           {LOAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <div className="spacer" />
         {editable && (
           <>
             <button className="btn btn-ghost" onClick={() => setIntake(true)}>
               📄 New from rate con (AI)
             </button>
-            <button className="btn btn-primary" onClick={() => setOpen('new')}>New load</button>
+            <button className="btn btn-primary" onClick={() => setOpen('new')}>+ New load</button>
           </>
         )}
-      </div>
+      </PageHead>
       <ErrorNote error={loads.error} />
       <div className="card">
         <table className="data">

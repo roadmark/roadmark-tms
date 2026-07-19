@@ -26,6 +26,7 @@ export default function MapLayers({ places, filter, setFilter, truckCount, ourCo
   }, [places]);
 
   const set = (patch) => setFilter((f) => ({ ...f, ...patch }));
+  const hasHere = !!import.meta.env.VITE_HERE_API_KEY;
 
   const toggleBrand = (b) => {
     setFilter((f) => {
@@ -119,6 +120,23 @@ export default function MapLayers({ places, filter, setFilter, truckCount, ourCo
           onChange={(e) => set({ preferredOnly: e.target.checked })} />
         <span className="swatch" style={{ background: '#34d399' }} />
         <span style={{ flex: 1 }}>Preferred only</span>
+      </label>
+
+      <div className="layer-divider" />
+      <div className="layer-row" style={{ cursor: 'default', paddingBottom: 2 }}>
+        <span className="group-label" style={{ fontSize: 10 }}>LIVE OVERLAYS</span>
+      </div>
+      <label className="layer-row">
+        <input type="checkbox" checked={filter.weather} onChange={(e) => set({ weather: e.target.checked })} />
+        <span className="swatch" style={{ background: '#22d3ee' }} />
+        <span style={{ flex: 1 }}>Weather radar</span>
+      </label>
+      <label className="layer-row" title={hasHere ? '' : 'Needs VITE_HERE_API_KEY'}>
+        <input type="checkbox" checked={filter.traffic} disabled={!hasHere}
+          onChange={(e) => set({ traffic: e.target.checked })} />
+        <span className="swatch" style={{ background: '#34d399' }} />
+        <span style={{ flex: 1, opacity: hasHere ? 1 : .5 }}>Traffic</span>
+        {!hasHere && <span className="num" style={{ fontSize: 10 }}>no key</span>}
       </label>
     </div>
   );

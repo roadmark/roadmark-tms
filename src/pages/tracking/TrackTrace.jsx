@@ -21,6 +21,7 @@ export default function LiveMap() {
   const [filter, setFilter] = useState({
     trucks: true, ours: true, recommended: true, stops: true,
     brands: null, kinds: null, preferredOnly: false,
+    weather: false, traffic: false,
   });
   const [layersOpen, setLayersOpen] = useState(false);
   const [viewInfo, setViewInfo] = useState(null);
@@ -158,6 +159,8 @@ export default function LiveMap() {
           dropMode={dropMode}
           onDropPin={(coords) => { setNewPin(coords); setDropMode(false); }}
           onVisibleChange={setViewInfo}
+          weather={filter.weather}
+          traffic={filter.traffic}
         />
       </div>
 

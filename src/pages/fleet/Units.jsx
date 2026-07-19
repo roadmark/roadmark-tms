@@ -8,6 +8,7 @@ import { UNIT_STATUSES, OWNERSHIP, TRUCK_TYPES, TRAILER_TYPES } from '../../data
 import DeptFeed from '../../components/DeptFeed';
 import ImportWizard from '../accounting/ImportWizard';
 import { useComplianceChips, ComplianceChips, CountBar } from '../../components/ChipStrips';
+import PageHead from '../../components/PageHead';
 import { title } from '../../lib/format';
 
 export default function Units({ kind }) {
@@ -63,16 +64,17 @@ export default function Units({ kind }) {
 
   return (
     <>
-      <div className="page-head">
-        <h2>{tab === 'trucks' ? 'Trucks' : 'Trailers'}</h2>
+      <PageHead title={tab === 'trucks' ? 'Trucks' : 'Trailers'} stats={[
+        { v: rows.length, l: tab },
+        { v: rows.filter((x) => x.status === 'active').length, l: 'active' },
+      ]}>
         <div className="seg">
           <button className={tab === 'trucks' ? 'on' : ''} onClick={() => pick('trucks')}>Trucks</button>
           <button className={tab === 'trailers' ? 'on' : ''} onClick={() => pick('trailers')}>Trailers</button>
         </div>
-        <div className="spacer" />
         {editable && <button className="btn btn-ghost" onClick={() => setImporting(true)}>Import CSV</button>}
-        {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add {tab.slice(0, -1)}</button>}
-      </div>
+        {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>+ Add {tab.slice(0, -1)}</button>}
+      </PageHead>
       <ErrorNote error={units.error} />
       <CountBar groups={groups} active={filters}
         onPick={(field, val) => setFilters((f) => ({ ...f, [field]: val }))} />
@@ -91,7 +93,10 @@ export default function Units({ kind }) {
                 <td><ComplianceChips items={chips.data?.[u.id]} /></td>
                 <td>{u.leasor || '—'}</td>
                 <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                  {editable && <button className="btn btn-ghost" onClick={() => setOpen(u)}>Edit</button>}
+                  <span className="row-actions">
+                    <button title="Open" onClick={() => nav(`/fleet/${table}/${u.id}`)}>↗</button>
+                    {editable && <button title="Edit" onClick={() => setOpen(u)}>✎</button>}
+                  </span>
                 </td>
               </tr>
             ))}

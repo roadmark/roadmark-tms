@@ -25,15 +25,25 @@ export const PLACE_STYLE = {
 /** Live fleet map: truck markers, place pins, and click-to-drop. */
 const MAX_MARKERS = 700;   // Leaflet stays smooth well under this
 
+/** Live weather radar — RainViewer is free and needs no key. */
+const RAINVIEWER_INDEX = 'https://api.rainviewer.com/public/weather-maps.json';
+/** HERE traffic flow raster tiles — uses the key you already have for routing. */
+const HERE_TRAFFIC = (key) =>
+  `https://traffic.maps.hereapi.com/v3/flow/mc/{z}/{x}/{y}/png8?apiKey=${key}&size=256&style=lite`;
+
 export default function FleetMap({
   trucks = [], places = [], height = 520,
   onSelectTruck, onSelectPlace, dropMode = false, onDropPin, onVisibleChange,
+  weather = false, traffic = false,
 }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const truckLayer = useRef(null);
   const placeLayer = useRef(null);
   const [bounds, setBounds] = useState(null);
+  const [radarPath, setRadarPath] = useState(null);
+  const weatherLayer = useRef(null);
+  const trafficLayer = useRef(null);
   const dropRef = useRef({ dropMode, onDropPin });
   dropRef.current = { dropMode, onDropPin };
 
@@ -61,6 +71,47 @@ export default function FleetMap({
   useEffect(() => {
     if (elRef.current) elRef.current.style.cursor = dropMode ? 'crosshair' : '';
   }, [dropMode]);
+
+  // latest radar frame, refreshed every 5 minutes
+  useEffect(() => {
+    if (!weather) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch(RAINVIEWER_INDEX);
+        const j = await r.json();
+        const frames = j?.radar?.past ?? [];
+        const last = frames[frames.length - 1];
+        if (alive && last?.path) setRadarPath(`${j.host || 'https://tilecache.rainviewer.com'}${last.path}`);
+      } catch { /* radar is optional */ }
+    };
+    load();
+    const t = setInterval(load, 5 * 60 * 1000);
+    return () => { alive = false; clearInterval(t); };
+  }, [weather]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (weatherLayer.current) { map.removeLayer(weatherLayer.current); weatherLayer.current = null; }
+    if (weather && radarPath) {
+      weatherLayer.current = L.tileLayer(`${radarPath}/256/{z}/{x}/{y}/2/1_1.png`, {
+        opacity: 0.55, zIndex: 200, attribution: 'Radar &copy; RainViewer',
+      }).addTo(map);
+    }
+  }, [weather, radarPath]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (trafficLayer.current) { map.removeLayer(trafficLayer.current); trafficLayer.current = null; }
+    const key = import.meta.env.VITE_HERE_API_KEY;
+    if (traffic && key) {
+      trafficLayer.current = L.tileLayer(HERE_TRAFFIC(key), {
+        opacity: 0.85, zIndex: 210, attribution: 'Traffic &copy; HERE',
+      }).addTo(map);
+    }
+  }, [traffic]);
 
   // only draw the pins actually in view — a national directory is far too many at once
   const visible = useMemo(() => {

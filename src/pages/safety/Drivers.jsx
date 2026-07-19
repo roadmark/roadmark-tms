@@ -9,6 +9,7 @@ import { title } from '../../lib/format';
 import DeptFeed from '../../components/DeptFeed';
 import ImportWizard from '../accounting/ImportWizard';
 import { useComplianceChips, ComplianceChips, CountBar } from '../../components/ChipStrips';
+import PageHead from '../../components/PageHead';
 
 export default function Drivers() {
   const { companyId, canEdit, user } = useAuth();
@@ -55,12 +56,13 @@ export default function Drivers() {
 
   return (
     <>
-      <div className="page-head">
-        <h2>Drivers</h2>
-        <div className="spacer" />
+      <PageHead title="Drivers" stats={[
+        { v: rows.length, l: 'drivers' },
+        { v: rows.filter((x) => x.status === 'active').length, l: 'active' },
+      ]}>
         {editable && <button className="btn btn-ghost" onClick={() => setImporting(true)}>Import CSV</button>}
-        {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add driver</button>}
-      </div>
+        {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>+ Add driver</button>}
+      </PageHead>
       <ErrorNote error={drivers.error} />
       <CountBar groups={groups} active={filters}
         onPick={(field, val) => setFilters((f) => ({ ...f, [field]: val }))} />
@@ -82,7 +84,10 @@ export default function Drivers() {
                 </td>
                 <td><ComplianceChips items={chips.data?.[d.id]} /></td>
                 <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                  {editable && <button className="btn btn-ghost" onClick={() => setOpen(d)}>Edit</button>}
+                  <span className="row-actions">
+                    <button title="Open" onClick={() => nav(`/safety/drivers/${d.id}`)}>↗</button>
+                    {editable && <button title="Edit" onClick={() => setOpen(d)}>✎</button>}
+                  </span>
                 </td>
               </tr>
             ))}

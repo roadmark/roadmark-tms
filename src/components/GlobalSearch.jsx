@@ -58,8 +58,7 @@ export default function GlobalSearch() {
         value={q} onChange={(e) => setQ(e.target.value)}
         placeholder="Search load #, driver, unit, VIN, customer…"
         aria-label="Search"
-        style={{ width: 300, padding: '7px 10px', borderRadius: 8,
-          border: '1px solid var(--line)', fontFamily: 'inherit', fontSize: 13.5 }}
+        className="searchbox" 
       />
       {res && (
         <div className="card" style={{ position: 'absolute', top: 40, right: 0, width: 380,
