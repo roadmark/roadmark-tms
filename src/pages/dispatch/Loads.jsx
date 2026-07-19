@@ -5,6 +5,7 @@ import { uploadCompanyDoc, openDoc } from '../../lib/storage';
 import { useAuth } from '../../app/AuthProvider';
 import { Chip, Drawer, Field, Empty, ErrorNote } from '../../components/ui';
 import { LOAD_STATUSES } from '../../data/enums';
+import BrokerEmail from '../../components/BrokerEmail';
 import { money, dt } from '../../lib/format';
 
 const LOAD_COLS = `id, load_number, status, customer_load_id, dispatcher_id, pickup_time, delivery_time,
@@ -489,6 +490,8 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
       <Field label="Notes">
         <textarea rows={3} value={f.notes} onChange={set('notes')} />
       </Field>
+
+      {load && <BrokerEmail loadId={load.id} />}
 
       {load && <StopsEditor loadId={load.id} companyId={companyId} />}
 

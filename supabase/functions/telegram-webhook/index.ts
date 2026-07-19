@@ -201,19 +201,51 @@ Deno.serve(async (req) => {
         return ok();
       }
 
-      // YES — attach the BOL to the load and mark it loaded
+      // YES — attach the BOL, mark loaded, and reply-all into the broker chain
       const payload = action.payload || {};
+      let docId: string | null = null;
       if (action.load_id) {
-        await db.from('documents').insert({
+        const { data: docRow } = await db.from('documents').insert({
           company_id: action.company_id, entity_type: 'load', entity_id: action.load_id,
           doc_type: 'bol', file_name: payload.file_name || 'bol.jpg',
           file_path: payload.file_path, extraction_job_id: action.extraction_job_id,
-        });
+        }).select('id').single();
+        docId = docRow?.id ?? null;
         const patch: Record<string, unknown> = { status: 'in_progress' };
         if (payload.temperature) patch.temperature = String(payload.temperature);
         if (payload.weight_lbs) patch.weight_lbs = Number(payload.weight_lbs);
         await db.from('loads').update(patch).eq('id', action.load_id);
       }
+
+      // send the loaded notice if this load has a broker conversation linked
+      let mailNote = '';
+      if (action.load_id) {
+        const { data: thread } = await db.from('email_threads')
+          .select('id').eq('load_id', action.load_id).limit(1).maybeSingle();
+        if (thread) {
+          try {
+            const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/email-send`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              },
+              body: JSON.stringify({
+                load_id: action.load_id, kind: 'loaded_notice', attach_document_id: docId,
+              }),
+            });
+            const out = await r.json();
+            mailNote = out?.ok
+              ? `\n📧 Loaded notice sent to ${(out.to || []).join(', ')}${(out.cc || []).length ? ` (cc ${out.cc.length} more)` : ''}.`
+              : `\n⚠️ Could not send the broker email: ${String(out?.error || '').slice(0, 120)}`;
+          } catch (e) {
+            mailNote = `\n⚠️ Could not send the broker email: ${String(e).slice(0, 120)}`;
+          }
+        } else {
+          mailNote = '\n<i>No broker conversation linked to this load — link one in the TMS to send notices automatically.</i>';
+        }
+      }
+
       await db.from('assistant_actions').update({
         status: 'sent', decided_at: new Date().toISOString(), sent_at: new Date().toISOString(),
         summary: `BOL approved — attached to load #${payload.load_number ?? '?'} and marked loaded`,
@@ -221,7 +253,7 @@ Deno.serve(async (req) => {
 
       await answerCb(cb.id, 'Approved');
       await editText(chat_id, cb.message.message_id,
-        `${cb.message.text}\n\n✅ Approved by ${who?.display_name || 'dispatcher'}. BOL attached to the load and the load marked loaded.\n<i>Broker email chain not connected yet — send the notice from your mailbox for now.</i>`);
+        `${cb.message.text}\n\n✅ Approved by ${who?.display_name || 'dispatcher'}. BOL attached and load marked loaded.${mailNote}`);
       return ok();
     }
 
