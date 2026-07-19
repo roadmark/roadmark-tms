@@ -222,6 +222,7 @@ function toPrefill(x) {
     notes: [x.commodity, x.temperature && `Temp: ${x.temperature}`, x.notes]
       .filter(Boolean).join(' · '),
     _lowConfidence: low,
+    _stops: stops,
   };
 }
 
@@ -272,6 +273,22 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
     if (hit) setF((p) => ({ ...p, customer_id: hit.id }));
     setMatchedName(true);
   }, [opts.data, prefill, matchedName, f.customer_id]);
+
+  // picking a driver pulls in their currently assigned truck + trailer
+  const pickDriver = async (e) => {
+    const driver_id = e.target.value;
+    setF((p) => ({ ...p, driver_id }));
+    if (!driver_id) return;
+    const { data } = await supabase.from('assignments')
+      .select('truck_id, trailer_id')
+      .eq('company_id', companyId).eq('driver_id', driver_id)
+      .is('ended_at', null).maybeSingle();
+    if (data) setF((p) => ({
+      ...p,
+      truck_id: data.truck_id || p.truck_id,
+      trailer_id: data.trailer_id || p.trailer_id,
+    }));
+  };
 
   const docs = useQuery({
     queryKey: ['load-docs', load?.id],
@@ -328,6 +345,19 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
       const { data: created, error } = await supabase.from('loads')
         .insert({ ...row, created_by: userId }).select('id').single();
       if (error) throw error;
+      // multi-stop: store every stop the AI found
+      const aiStops = prefill?._stops || [];
+      if (aiStops.length) {
+        const rows = aiStops.map((st, i) => ({
+          load_id: created.id, company_id: companyId, seq: i + 1,
+          stop_type: st.stop_type === 'delivery' ? 'delivery' : 'pickup',
+          location_name: st.location_name || null,
+          city: st.city || null, state: st.state || null,
+          appointment_type: st.appointment_type === 'fcfs' ? 'fcfs' : 'appt',
+          scheduled_at: st.scheduled_at ? new Date(st.scheduled_at).toISOString() : null,
+        }));
+        await supabase.from('load_stops').insert(rows);
+      }
       if (job) {
         await supabase.from('documents').insert({
           company_id: companyId, entity_type: 'load', entity_id: created.id,
@@ -391,7 +421,7 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
       </Field>
       <div className="frow">
         <Field label="Driver">
-          <select value={f.driver_id} onChange={set('driver_id')}>
+          <select value={f.driver_id} onChange={pickDriver}>
             <option value="">—</option>
             {(opts.data?.drivers || []).map((x) => <option key={x.id} value={x.id}>{x.full_name}</option>)}
           </select>
@@ -450,6 +480,8 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
         <textarea rows={3} value={f.notes} onChange={set('notes')} />
       </Field>
 
+      {load && <StopsEditor loadId={load.id} companyId={companyId} />}
+
       {load && (
         <>
           <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '14px 0' }} />
@@ -477,5 +509,124 @@ function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId })
         </>
       )}
     </Drawer>
+  );
+}
+
+
+/* ---------------- stops editor ---------------- */
+
+function StopsEditor({ loadId, companyId }) {
+  const qc = useQueryClient();
+  const { canEdit } = useAuth();
+  const [adding, setAdding] = useState(false);
+  const [n, setN] = useState({ stop_type: 'delivery', city: '', state: '', location_name: '',
+    appointment_type: 'appt', scheduled_at: '' });
+  const setNv = (k) => (e) => setN((p) => ({ ...p, [k]: e.target.value }));
+
+  const stops = useQuery({
+    queryKey: ['load-stops', loadId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('load_stops')
+        .select('id, seq, stop_type, location_name, city, state, appointment_type, scheduled_at')
+        .eq('load_id', loadId).order('seq');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['load-stops', loadId] });
+    qc.invalidateQueries({ queryKey: ['loads'] });
+  };
+
+  const add = useMutation({
+    mutationFn: async () => {
+      const seq = (stops.data?.length || 0) + 1;
+      const { error } = await supabase.from('load_stops').insert({
+        load_id: loadId, company_id: companyId, seq,
+        stop_type: n.stop_type,
+        location_name: n.location_name || null,
+        city: n.city || null, state: n.state || null,
+        appointment_type: n.appointment_type,
+        scheduled_at: n.scheduled_at ? new Date(n.scheduled_at).toISOString() : null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setAdding(false);
+      setN({ stop_type: 'delivery', city: '', state: '', location_name: '', appointment_type: 'appt', scheduled_at: '' });
+      refresh();
+    },
+  });
+
+  const del = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('load_stops').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: refresh,
+  });
+
+  const editable = canEdit('dispatch') || canEdit('accounting');
+
+  return (
+    <>
+      <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '14px 0' }} />
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, margin: '0 0 8px' }}>Stops</h3>
+      <ErrorNote error={stops.error || add.error || del.error} />
+      {(stops.data || []).map((st) => (
+        <div key={st.id} className="feed-item" style={{ padding: '8px 2px' }}>
+          <span className={`chip ${st.stop_type === 'pickup' ? 'blue' : 'green'}`}>{st.seq}. {st.stop_type}</span>
+          <div style={{ flex: 1 }}>
+            <div className="small" style={{ fontWeight: 600 }}>
+              {[st.city, st.state].filter(Boolean).join(', ') || st.location_name || '—'}
+            </div>
+            <div className="small muted">
+              {st.appointment_type === 'fcfs' ? 'FCFS' : 'Appointment'} · {dt(st.scheduled_at)}
+            </div>
+          </div>
+          {editable && (
+            <button className="btn btn-ghost" onClick={() => del.mutate(st.id)}>Remove</button>
+          )}
+        </div>
+      ))}
+      {stops.data?.length === 0 && (
+        <p className="small muted">No stops recorded. Adding a pickup and a delivery updates
+          the load's route and the "(+n)" multi-stop label automatically.</p>
+      )}
+      {editable && !adding && (
+        <button className="btn btn-ghost" onClick={() => setAdding(true)}>+ Add stop</button>
+      )}
+      {adding && (
+        <div style={{ border: '1px solid var(--line)', borderRadius: 8, padding: 10, marginTop: 8 }}>
+          <div className="frow">
+            <Field label="Type">
+              <select value={n.stop_type} onChange={setNv('stop_type')}>
+                <option value="pickup">pickup</option><option value="delivery">delivery</option>
+              </select>
+            </Field>
+            <Field label="Appointment">
+              <select value={n.appointment_type} onChange={setNv('appointment_type')}>
+                <option value="appt">Appointment</option><option value="fcfs">FCFS</option>
+              </select>
+            </Field>
+          </div>
+          <div className="frow">
+            <Field label="City"><input value={n.city} onChange={setNv('city')} /></Field>
+            <Field label="State"><input value={n.state} onChange={setNv('state')} maxLength={2} /></Field>
+          </div>
+          <Field label="Facility / shipper name">
+            <input value={n.location_name} onChange={setNv('location_name')} />
+          </Field>
+          <Field label="Scheduled">
+            <input type="datetime-local" value={n.scheduled_at} onChange={setNv('scheduled_at')} />
+          </Field>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary" disabled={add.isPending} onClick={() => add.mutate()}>Add stop</button>
+            <button className="btn btn-ghost" onClick={() => setAdding(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

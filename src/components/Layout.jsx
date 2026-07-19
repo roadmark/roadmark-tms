@@ -16,6 +16,7 @@ const NAV = [
   { section: 'People & Equipment', items: [
     { to: '/safety/drivers', label: 'Safety · Drivers', dept: 'safety' },
     { to: '/fleet/units', label: 'Fleet · Units', dept: 'fleet' },
+    { to: '/fleet/assignments', label: 'Assignments', dept: 'fleet' },
     { to: '/maintenance', label: 'Maintenance', dept: 'maintenance' },
   ]},
   { section: 'Automation', items: [
@@ -29,7 +30,7 @@ const NAV = [
 const TITLES = {
   '/': 'Overview', '/dispatch/loads': 'Loads', '/dispatch/customers': 'Customers',
   '/tracking': 'Track & Trace', '/accounting': 'Accounting', '/safety/drivers': 'Drivers',
-  '/fleet/units': 'Trucks & Trailers', '/maintenance': 'Maintenance',
+  '/fleet/units': 'Trucks & Trailers', '/fleet/assignments': 'Assignments', '/maintenance': 'Maintenance',
   '/assistants': 'Assistants', '/admin': 'Company & Users',
 };
 

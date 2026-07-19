@@ -8,6 +8,7 @@ import Loads from './pages/dispatch/Loads';
 import Customers from './pages/dispatch/Customers';
 import Drivers from './pages/safety/Drivers';
 import Units from './pages/fleet/Units';
+import Assignments from './pages/fleet/Assignments';
 import Maintenance from './pages/maintenance/Maintenance';
 import Accounting from './pages/accounting/Accounting';
 import TrackTrace from './pages/tracking/TrackTrace';
@@ -50,6 +51,7 @@ export default function App() {
               <Route path="/dispatch/customers" element={<Customers />} />
               <Route path="/safety/drivers" element={<Drivers />} />
               <Route path="/fleet/units" element={<Units />} />
+              <Route path="/fleet/assignments" element={<Assignments />} />
               <Route path="/maintenance" element={<Maintenance />} />
               <Route path="/accounting" element={<Accounting />} />
               <Route path="/tracking" element={<TrackTrace />} />
