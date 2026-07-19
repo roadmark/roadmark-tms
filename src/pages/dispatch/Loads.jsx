@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { uploadCompanyDoc, openDoc } from '../../lib/storage';
 import { useAuth } from '../../app/AuthProvider';
 import { Chip, Drawer, Field, Empty, ErrorNote } from '../../components/ui';
 import { LOAD_STATUSES } from '../../data/enums';
@@ -18,7 +19,8 @@ export default function Loads() {
   const { companyId, canEdit, user } = useAuth();
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
-  const [open, setOpen] = useState(null); // null | 'new' | load row
+  const [open, setOpen] = useState(null);      // null | 'new' | {load} | {prefill, job}
+  const [intake, setIntake] = useState(false); // rate-con intake drawer
 
   const loads = useQuery({
     queryKey: ['loads', companyId, statusFilter],
@@ -46,7 +48,14 @@ export default function Loads() {
           {LOAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <div className="spacer" />
-        {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>New load</button>}
+        {editable && (
+          <>
+            <button className="btn btn-ghost" onClick={() => setIntake(true)}>
+              📄 New from rate con (AI)
+            </button>
+            <button className="btn btn-primary" onClick={() => setOpen('new')}>New load</button>
+          </>
+        )}
       </div>
       <ErrorNote error={loads.error} />
       <div className="card">
@@ -59,7 +68,7 @@ export default function Loads() {
           </thead>
           <tbody>
             {(loads.data || []).map((l) => (
-              <tr key={l.id} onClick={() => editable && setOpen(l)}>
+              <tr key={l.id} onClick={() => editable && setOpen({ load: l })}>
                 <td className="num">{l.load_number}</td>
                 <td><Chip value={l.status} /></td>
                 <td>{l.customer?.name || '—'}</td>
@@ -75,43 +84,178 @@ export default function Loads() {
             ))}
           </tbody>
         </table>
-        {loads.data?.length === 0 && <Empty head="No loads yet" sub='Click "New load" to create the first one.' />}
+        {loads.data?.length === 0 && <Empty head="No loads yet" sub='Click "New load", or drop a rate confirmation on "New from rate con".' />}
       </div>
-      {open && <LoadDrawer load={open === 'new' ? null : open} onClose={() => setOpen(null)}
-        companyId={companyId} userId={user?.id}
-        onSaved={() => { setOpen(null); qc.invalidateQueries({ queryKey: ['loads'] }); }} />}
+
+      {intake && (
+        <RateConIntake
+          onClose={() => setIntake(false)}
+          onReady={(prefill, job) => { setIntake(false); setOpen({ prefill, job }); }}
+        />
+      )}
+
+      {open && (
+        <LoadDrawer
+          load={open === 'new' ? null : open.load || null}
+          prefill={open?.prefill || null}
+          job={open?.job || null}
+          onClose={() => setOpen(null)}
+          companyId={companyId} userId={user?.id}
+          onSaved={() => { setOpen(null); qc.invalidateQueries({ queryKey: ['loads'] }); }}
+        />
+      )}
     </>
   );
 }
 
-function LoadDrawer({ load, onClose, onSaved, companyId, userId }) {
+/* ---------------- AI rate-con intake ---------------- */
+
+function RateConIntake({ onClose, onReady }) {
+  const { companyId, user } = useAuth();
+  const [phase, setPhase] = useState('pick');  // pick -> uploading -> reading -> failed
+  const [error, setError] = useState(null);
+  const [jobRow, setJobRow] = useState(null);
+  const fileRef = useRef(null);
+  const timer = useRef(null);
+
+  useEffect(() => () => clearInterval(timer.current), []);
+
+  const start = async (file) => {
+    try {
+      setPhase('uploading'); setError(null);
+      const { path, name } = await uploadCompanyDoc(companyId, 'load', 'intake', file);
+      const { data: job, error: jErr } = await supabase.from('extraction_jobs')
+        .insert({
+          company_id: companyId, kind: 'rate_confirmation', status: 'pending',
+          file_path: path, file_name: name, created_by: user?.id,
+        })
+        .select('*').single();
+      if (jErr) throw jErr;
+      setJobRow(job);
+      setPhase('reading');
+      const { error: fnErr } = await supabase.functions
+        .invoke('extract-document', { body: { job_id: job.id } });
+      if (fnErr) throw new Error(fnErr.message || 'Extraction function failed — is it deployed?');
+      timer.current = setInterval(async () => {
+        const { data: j } = await supabase.from('extraction_jobs')
+          .select('*').eq('id', job.id).single();
+        if (!j) return;
+        setJobRow(j);
+        if (j.status === 'needs_review') {
+          clearInterval(timer.current);
+          onReady(toPrefill(j.extracted), j);
+        } else if (j.status === 'failed') {
+          clearInterval(timer.current);
+          setError(new Error(j.error || 'Extraction failed'));
+          setPhase('failed');
+        }
+      }, 2000);
+    } catch (e) {
+      setError(e); setPhase('failed');
+    }
+  };
+
+  return (
+    <Drawer title="New load from rate confirmation" onClose={onClose}
+      footer={<button className="btn btn-ghost" onClick={onClose}>Cancel</button>}>
+      <ErrorNote error={error} />
+      {phase === 'pick' && (
+        <>
+          <p className="muted">Drop the broker's rate confirmation (PDF or photo).
+            The AI reads it, pre-fills the load form, and you review before anything is created.</p>
+          <input ref={fileRef} type="file" accept=".pdf,image/*"
+            onChange={(e) => e.target.files?.[0] && start(e.target.files[0])} />
+        </>
+      )}
+      {phase === 'uploading' && <p>Uploading document…</p>}
+      {phase === 'reading' && (
+        <>
+          <p><b>Reading the rate con…</b></p>
+          <p className="muted small">Extracting customer, rate, stops, appointment times.
+            Usually 5–15 seconds.</p>
+        </>
+      )}
+      {phase === 'failed' && (
+        <>
+          <p>The document couldn't be read automatically.</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary" onClick={() => { setPhase('pick'); setError(null); }}>
+              Try another file
+            </button>
+            {jobRow && (
+              <button className="btn btn-ghost"
+                onClick={() => onReady({}, jobRow)}>Enter manually (keep document)</button>
+            )}
+          </div>
+        </>
+      )}
+    </Drawer>
+  );
+}
+
+/** Map the extraction JSON onto load-form fields. */
+function toPrefill(x) {
+  if (!x) return {};
+  const stops = Array.isArray(x.stops) ? x.stops : [];
+  const pickups = stops.filter((s) => s.stop_type === 'pickup');
+  const dels = stops.filter((s) => s.stop_type === 'delivery');
+  const p = pickups[0], dLast = dels[dels.length - 1];
+  const loc = (s) => s ? [s.city, s.state].filter(Boolean).join(', ') || s.location_name || '' : '';
+  const localInput = (iso) => {
+    if (!iso) return '';
+    const t = new Date(iso);
+    if (isNaN(t)) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}T${pad(t.getHours())}:${pad(t.getMinutes())}`;
+  };
+  const conf = x.confidence || {};
+  const low = Object.entries(conf).filter(([, v]) => Number(v) < 0.8).map(([k]) => k);
+  return {
+    customer_name: x.customer_name || '',
+    customer_load_id: x.customer_load_id || '',
+    freight_amount: Number(x.freight_amount) || 0,
+    pickup_location: loc(p),
+    pickup_time: localInput(p ? p.scheduled_at : null),
+    delivery_location: loc(dLast) + (dels.length > 1 ? ` (+${dels.length - 1})` : ''),
+    delivery_time: localInput(dLast ? dLast.scheduled_at : null),
+    weight_lbs: x.weight_lbs || '',
+    notes: [x.commodity, x.temperature && `Temp: ${x.temperature}`, x.notes]
+      .filter(Boolean).join(' · '),
+    _lowConfidence: low,
+  };
+}
+
+/* ---------------- load drawer (manual + review modes) ---------------- */
+
+function LoadDrawer({ load, prefill, job, onClose, onSaved, companyId, userId }) {
   const [f, setF] = useState(() => ({
     status: load?.status || 'scheduled',
     customer_id: load?.customer?.id || '',
-    customer_load_id: load?.customer_load_id || '',
+    customer_load_id: load?.customer_load_id || prefill?.customer_load_id || '',
     driver_id: load?.driver?.id || '',
     truck_id: load?.truck?.id || '',
     trailer_id: load?.trailer?.id || '',
-    pickup_location: load?.pickup_location || '',
-    pickup_time: load?.pickup_time?.slice(0, 16) || '',
-    delivery_location: load?.delivery_location || '',
-    delivery_time: load?.delivery_time?.slice(0, 16) || '',
+    pickup_location: load?.pickup_location || prefill?.pickup_location || '',
+    pickup_time: load?.pickup_time?.slice(0, 16) || prefill?.pickup_time || '',
+    delivery_location: load?.delivery_location || prefill?.delivery_location || '',
+    delivery_time: load?.delivery_time?.slice(0, 16) || prefill?.delivery_time || '',
     loaded_miles: load?.loaded_miles ?? 0,
     empty_miles: load?.empty_miles ?? 0,
-    freight_amount: load?.freight_amount ?? 0,
+    freight_amount: load?.freight_amount ?? prefill?.freight_amount ?? 0,
     driver_rate: load?.driver_rate ?? 0,
-    weight_lbs: load?.weight_lbs ?? '',
-    notes: load?.notes || '',
+    weight_lbs: load?.weight_lbs ?? prefill?.weight_lbs ?? '',
+    notes: load?.notes || prefill?.notes || '',
   }));
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const [matchedName, setMatchedName] = useState(false);
 
-  const { companyId: cid } = useAuth();
+  const { companyId: cid, canEdit } = useAuth();
   const opts = useQuery({
     queryKey: ['load-options', cid],
     queryFn: async () => {
       const [c, dr, t, tr] = await Promise.all([
         supabase.from('customers').select('id,name').eq('company_id', cid).order('name'),
-        supabase.from('drivers').select('id,full_name').eq('company_id', cid).in('status', ['active','ready']).order('full_name'),
+        supabase.from('drivers').select('id,full_name').eq('company_id', cid).in('status', ['active', 'ready']).order('full_name'),
         supabase.from('trucks').select('id,unit_number').eq('company_id', cid).order('unit_number'),
         supabase.from('trailers').select('id,unit_number').eq('company_id', cid).order('unit_number'),
       ]);
@@ -119,6 +263,40 @@ function LoadDrawer({ load, onClose, onSaved, companyId, userId }) {
       return { customers: c.data, drivers: dr.data, trucks: t.data, trailers: tr.data };
     },
   });
+
+  useEffect(() => {
+    if (matchedName || !prefill?.customer_name || !opts.data || f.customer_id) return;
+    const want = prefill.customer_name.toLowerCase();
+    const hit = opts.data.customers.find((c) =>
+      c.name.toLowerCase().includes(want) || want.includes(c.name.toLowerCase()));
+    if (hit) setF((p) => ({ ...p, customer_id: hit.id }));
+    setMatchedName(true);
+  }, [opts.data, prefill, matchedName, f.customer_id]);
+
+  const docs = useQuery({
+    queryKey: ['load-docs', load?.id],
+    enabled: !!load?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('documents')
+        .select('id, doc_type, file_name, file_path, created_at')
+        .eq('entity_type', 'load').eq('entity_id', load.id)
+        .order('created_at');
+      if (error) throw error;
+      return data;
+    },
+  });
+  const qc = useQueryClient();
+  const [docType, setDocType] = useState('pod');
+  const attachDoc = async (file) => {
+    const { path, name } = await uploadCompanyDoc(companyId, 'load', load.id, file);
+    const { error } = await supabase.from('documents').insert({
+      company_id: companyId, entity_type: 'load', entity_id: load.id,
+      doc_type: docType, file_name: name, file_path: path,
+      mime_type: file.type, size_bytes: file.size, uploaded_by: userId,
+    });
+    if (error) throw error;
+    qc.invalidateQueries({ queryKey: ['load-docs', load.id] });
+  };
 
   const save = useMutation({
     mutationFn: async () => {
@@ -142,26 +320,59 @@ function LoadDrawer({ load, onClose, onSaved, companyId, userId }) {
         notes: f.notes || null,
       };
       if (load) {
-        const { error } = await supabase.from('loads').update({ ...row, updated_by: userId }).eq('id', load.id);
+        const { error } = await supabase.from('loads')
+          .update({ ...row, updated_by: userId }).eq('id', load.id);
         if (error) throw error;
-      } else {
-        const { error } = await supabase.from('loads').insert({ ...row, created_by: userId });
-        if (error) throw error;
+        return load.id;
       }
+      const { data: created, error } = await supabase.from('loads')
+        .insert({ ...row, created_by: userId }).select('id').single();
+      if (error) throw error;
+      if (job) {
+        await supabase.from('documents').insert({
+          company_id: companyId, entity_type: 'load', entity_id: created.id,
+          doc_type: 'rate_con', file_name: job.file_name || 'rate_con.pdf',
+          file_path: job.file_path, extraction_job_id: job.id, uploaded_by: userId,
+        });
+        await supabase.from('extraction_jobs').update({
+          status: 'approved', reviewed_by: userId, reviewed_at: new Date().toISOString(),
+          applied_entity_type: 'load', applied_entity_id: created.id,
+        }).eq('id', job.id);
+      }
+      return created.id;
     },
     onSuccess: onSaved,
   });
 
-  const o = opts.data;
+  const low = prefill?._lowConfidence || [];
+  const heading = load ? `Load #${load.load_number}`
+    : job ? 'Review extracted load' : 'New load';
+
   return (
-    <Drawer title={load ? `Load #${load.load_number}` : 'New load'} onClose={onClose}
+    <Drawer title={heading} onClose={onClose}
       footer={<>
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate()}>
-          {save.isPending ? 'Saving…' : (load ? 'Save changes' : 'Create load')}
+          {save.isPending ? 'Saving…' : (load ? 'Save changes' : job ? 'Create load + attach rate con' : 'Create load')}
         </button>
       </>}>
       <ErrorNote error={save.error || opts.error} />
+
+      {job && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 12, padding: '10px 12px' }}>
+          <b>AI pre-filled from the rate con — review every field.</b>
+          {prefill?.customer_name && !f.customer_id && (
+            <div className="small">Customer "{prefill.customer_name}" isn't in your list —
+              pick one below or add it under Customers first.</div>
+          )}
+          {low.length > 0 && (
+            <div className="small">Double-check (lower confidence): {low.join(', ')}</div>
+          )}
+          <button className="btn btn-ghost" style={{ marginTop: 6 }}
+            onClick={() => openDoc(job.file_path)}>Open the document</button>
+        </div>
+      )}
+
       <div className="frow">
         <Field label="Status">
           <select value={f.status} onChange={set('status')}>
@@ -175,20 +386,20 @@ function LoadDrawer({ load, onClose, onSaved, companyId, userId }) {
       <Field label="Customer (broker)">
         <select value={f.customer_id} onChange={set('customer_id')}>
           <option value="">—</option>
-          {(o?.customers || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {(opts.data?.customers || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Field>
       <div className="frow">
         <Field label="Driver">
           <select value={f.driver_id} onChange={set('driver_id')}>
             <option value="">—</option>
-            {(o?.drivers || []).map((x) => <option key={x.id} value={x.id}>{x.full_name}</option>)}
+            {(opts.data?.drivers || []).map((x) => <option key={x.id} value={x.id}>{x.full_name}</option>)}
           </select>
         </Field>
         <Field label="Truck">
           <select value={f.truck_id} onChange={set('truck_id')}>
             <option value="">—</option>
-            {(o?.trucks || []).map((x) => <option key={x.id} value={x.id}>{x.unit_number}</option>)}
+            {(opts.data?.trucks || []).map((x) => <option key={x.id} value={x.id}>{x.unit_number}</option>)}
           </select>
         </Field>
       </div>
@@ -196,7 +407,7 @@ function LoadDrawer({ load, onClose, onSaved, companyId, userId }) {
         <Field label="Trailer">
           <select value={f.trailer_id} onChange={set('trailer_id')}>
             <option value="">—</option>
-            {(o?.trailers || []).map((x) => <option key={x.id} value={x.id}>{x.unit_number}</option>)}
+            {(opts.data?.trailers || []).map((x) => <option key={x.id} value={x.id}>{x.unit_number}</option>)}
           </select>
         </Field>
         <Field label="Weight (lbs)">
@@ -238,10 +449,33 @@ function LoadDrawer({ load, onClose, onSaved, companyId, userId }) {
       <Field label="Notes">
         <textarea rows={3} value={f.notes} onChange={set('notes')} />
       </Field>
-      <p className="small muted">
-        Full version adds multi-stop entry, FCFS/appointment windows, rate-con AI intake,
-        and document chips — per the build plan (Phases 4–5).
-      </p>
+
+      {load && (
+        <>
+          <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '14px 0' }} />
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, margin: '0 0 8px' }}>Documents</h3>
+          <ErrorNote error={docs.error} />
+          {(docs.data || []).map((doc) => (
+            <div key={doc.id} className="feed-item" style={{ padding: '8px 2px' }}>
+              <span className="chip gray">{doc.doc_type}</span>
+              <div style={{ flex: 1 }} className="small">{doc.file_name}</div>
+              <button className="btn btn-ghost" onClick={() => openDoc(doc.file_path)}>Open</button>
+            </div>
+          ))}
+          {docs.data?.length === 0 && <p className="small muted">No documents attached yet.</p>}
+          {(canEdit('dispatch') || canEdit('accounting')) && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+              <select value={docType} onChange={(e) => setDocType(e.target.value)}
+                style={{ padding: '6px 8px', border: '1px solid var(--line)', borderRadius: 7 }}>
+                {['pod', 'bol', 'lumper', 'rate_con', 'invoice', 'photo', 'other'].map((t) =>
+                  <option key={t} value={t}>{t}</option>)}
+              </select>
+              <input type="file" accept=".pdf,image/*"
+                onChange={(e) => e.target.files?.[0] && attachDoc(e.target.files[0]).catch((err) => alert(err.message))} />
+            </div>
+          )}
+        </>
+      )}
     </Drawer>
   );
 }

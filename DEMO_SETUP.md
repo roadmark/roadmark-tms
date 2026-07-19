@@ -28,11 +28,16 @@ Everything is copy-paste. Placeholders in ALL_CAPS.
 6. **Authentication → Sign In / Providers**: Email = ON. Then under Auth settings turn
    **OFF** "Allow new users to sign up" (accounts are invite-only).
 
-## 2. Your login (5 min)
+## 2. Your login (2 min — no emails involved)
 
-1. **Authentication → Users → Invite user** → your email → open the email you receive →
-   set a password.
-2. Back in **Authentication → Users**, click your user and copy the **User UID**.
+Two things make a working account: a **login** (email + password, lives in Supabase
+Auth) and a **membership row** that tells the TMS which company that login belongs to
+and with which role. You create both here.
+
+1. **Authentication → Users → Add user → Create new user** → type your email and a
+   password, tick **Auto Confirm User** → Create. (Don't use "Invite user" for the demo
+   — invite emails redirect to a Site URL you haven't configured yet.)
+2. Copy the new user's **UID** from the users list.
 3. **SQL Editor**, run (paste your UID):
 
 ```sql
@@ -40,16 +45,21 @@ insert into company_members (company_id, user_id, role)
 values ('11111111-1111-1111-1111-111111111111', 'YOUR_USER_UID', 'master_admin');
 ```
 
-That company id is the seeded demo company — it's fixed on purpose so this is
-copy-paste. To invite colleagues later, repeat these steps with their email and a role,
-for example a dispatch team leader:
+That company id is the seeded demo company — fixed on purpose so this is copy-paste.
+
+**Adding colleagues:** same two steps with their email and role. A dispatch team leader:
 
 ```sql
 insert into company_members (company_id, user_id, role, department)
 values ('11111111-1111-1111-1111-111111111111', 'THEIR_USER_UID', 'team_leader', 'dispatch');
 ```
 
-They will be able to **view everything** but **edit only dispatch** — try it.
+They can then **view everything** but **edit only dispatch** — try it.
+
+**For later (real invites by email):** Authentication → URL Configuration → set
+**Site URL** to your live Vercel URL and add `http://localhost:5173` to Redirect URLs.
+Until that's set, invite links point to localhost:3000 and go nowhere — that's why the
+demo uses Create new user instead.
 
 ## 3. Run it on your computer first (10 min)
 
@@ -120,6 +130,7 @@ then `git remote add origin https://github.com/sajks/roadmark-tms.git` and
   missing variables. Restart `npm run dev` after editing.
 - **"Almost there — not a member of any company"** → run the §2 membership insert with
   YOUR user UID, refresh.
+- **Invite email links to localhost:3000** → Site URL not configured; for the demo use Add user → Create new user with a password (§2), and set Site URL once the site is live.
 - **Login says invalid credentials** → the invite wasn't completed; re-invite from
   Authentication → Users.
 - **Tables empty** → `demo_seed.sql` not run, or run before migrations; run it now.
