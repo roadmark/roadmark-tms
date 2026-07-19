@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -7,6 +7,8 @@ import { Drawer, Field, Empty, ErrorNote, Chip } from '../../components/ui';
 import { UNIT_STATUSES, OWNERSHIP, TRUCK_TYPES, TRAILER_TYPES } from '../../data/enums';
 import DeptFeed from '../../components/DeptFeed';
 import ImportWizard from '../accounting/ImportWizard';
+import { useComplianceChips, ComplianceChips, CountBar } from '../../components/ChipStrips';
+import { title } from '../../lib/format';
 
 export default function Units({ kind }) {
   const { companyId, canEdit, user } = useAuth();
@@ -16,6 +18,8 @@ export default function Units({ kind }) {
   // the route drives the tab, so Trucks / Trailers in the sidebar actually switch
   useEffect(() => { if (kind && kind !== tab) setTab(kind); }, [kind]);
   const pick = (next) => { setTab(next); nav(`/fleet/${next}`); };
+  const [filters, setFilters] = useState({});
+  const chips = useComplianceChips(tab === 'trucks' ? 'truck' : 'trailer');
   const [open, setOpen] = useState(null);
   const [importing, setImporting] = useState(false);
   const table = tab; // 'trucks' | 'trailers'
@@ -36,6 +40,27 @@ export default function Units({ kind }) {
   const editable = canEdit('fleet');
   const typeCol = table === 'trucks' ? 'truck_type' : 'trailer_type';
 
+  const rows = useMemo(() => {
+    let list = units.data || [];
+    if (filters.status) list = list.filter((x) => x.status === filters.status);
+    if (filters.ownership) list = list.filter((x) => x.ownership === filters.ownership);
+    return list;
+  }, [units.data, filters]);
+
+  const groups = useMemo(() => {
+    const all = units.data || [];
+    const cnt = (field) => {
+      const m = {};
+      all.forEach((x) => { m[x[field]] = (m[x[field]] || 0) + 1; });
+      return Object.entries(m).map(([key, n]) => ({ key, label: title(key), n }));
+    };
+    return [
+      { label: 'Status', field: 'status', rows: cnt('status') },
+      { label: 'Ownership', field: 'ownership', rows: cnt('ownership') },
+      { label: 'Type', field: typeCol, rows: cnt(typeCol) },
+    ];
+  }, [units.data, typeCol]);
+
   return (
     <>
       <div className="page-head">
@@ -49,11 +74,13 @@ export default function Units({ kind }) {
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add {tab.slice(0, -1)}</button>}
       </div>
       <ErrorNote error={units.error} />
+      <CountBar groups={groups} active={filters}
+        onPick={(field, val) => setFilters((f) => ({ ...f, [field]: val }))} />
       <div className="card" style={{ marginBottom: 16 }}>
         <table className="data">
-          <thead><tr><th>Unit #</th><th>Status</th><th>Type</th><th>Ownership</th><th>VIN</th><th>Plate</th><th>Leasor</th><th></th></tr></thead>
+          <thead><tr><th>Unit #</th><th>Status</th><th>Type</th><th>Ownership</th><th>VIN</th><th>Plate</th><th>Compliances</th><th>Leasor</th><th></th></tr></thead>
           <tbody>
-            {(units.data || []).map((u) => (
+            {rows.map((u) => (
               <tr key={u.id} onClick={() => nav(`/fleet/${table}/${u.id}`)}>
                 <td className="num" style={{ fontWeight: 700 }}>{u.unit_number}</td>
                 <td><Chip value={u.status} /></td>
@@ -61,6 +88,7 @@ export default function Units({ kind }) {
                 <td>{u.ownership}</td>
                 <td className="small">{u.vin || '—'}</td>
                 <td>{u.plate ? `${u.plate} (${u.plate_state || '—'})` : '—'}</td>
+                <td><ComplianceChips items={chips.data?.[u.id]} /></td>
                 <td>{u.leasor || '—'}</td>
                 <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                   {editable && <button className="btn btn-ghost" onClick={() => setOpen(u)}>Edit</button>}
@@ -69,7 +97,7 @@ export default function Units({ kind }) {
             ))}
           </tbody>
         </table>
-        {units.data?.length === 0 && <Empty head={`No ${tab} yet`} sub="Fleet adds units here; dispatch assigns drivers to them." />}
+        {rows.length === 0 && <Empty head={`No ${tab} yet`} sub="Fleet adds units here; dispatch assigns drivers to them." />}
       </div>
       <DeptFeed dept="fleet" />
       {importing && <ImportWizard kind={table} onClose={() => setImporting(false)}

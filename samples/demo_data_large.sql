@@ -382,3 +382,45 @@ begin
     values (cid, t.id, base + (case when i % 6 = 0 then 26800 else 9000 + (i * 640) end), 'eld', now() - interval '2 hours');
   end loop;
 end $$;
+
+-- ---------- compliance items for every driver and truck (so the chips have content) ----------
+do $$
+declare
+  cid uuid := '11111111-1111-1111-1111-111111111111';
+  r record; i int := 0; ct uuid; ccode text; span int;
+begin
+  for r in select id from drivers where company_id = cid order by full_name loop
+    i := i + 1;
+    foreach ccode in array array['CDL','MED','MVR','DT','CH','W9'] loop
+      select id into ct from compliance_types where code = ccode and applies_to = 'driver' limit 1;
+      if ct is null then continue; end if;
+      -- most valid, a few expiring, a couple expired
+      span := case
+        when i % 11 = 0 and ccode = 'MED' then -20
+        when i % 7  = 0 and ccode = 'MVR' then 9
+        when i % 9  = 0 and ccode = 'DT'  then 22
+        else 120 + (i * 11) % 500 end;
+      insert into compliance_items (company_id, compliance_type_id, entity_type, entity_id,
+                                    issue_date, expiry_date, status)
+      values (cid, ct, 'driver', r.id, current_date - 300, current_date + span,
+              case when span < 0 then 'expired' when span <= 30 then 'expiring' else 'valid' end);
+    end loop;
+  end loop;
+
+  i := 0;
+  for r in select id from trucks where company_id = cid order by unit_number loop
+    i := i + 1;
+    foreach ccode in array array['REG','INSP','HUT2290'] loop
+      select id into ct from compliance_types where code = ccode and applies_to = 'truck' limit 1;
+      if ct is null then continue; end if;
+      span := case
+        when i % 8 = 0 and ccode = 'INSP' then 12
+        when i % 13 = 0 and ccode = 'REG' then -6
+        else 80 + (i * 17) % 400 end;
+      insert into compliance_items (company_id, compliance_type_id, entity_type, entity_id,
+                                    issue_date, expiry_date, status)
+      values (cid, ct, 'truck', r.id, current_date - 300, current_date + span,
+              case when span < 0 then 'expired' when span <= 30 then 'expiring' else 'valid' end);
+    end loop;
+  end loop;
+end $$;

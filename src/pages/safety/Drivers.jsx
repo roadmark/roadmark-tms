@@ -1,17 +1,23 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../app/AuthProvider';
 import { Drawer, Field, Empty, ErrorNote, Chip } from '../../components/ui';
 import { DRIVER_STATUSES, DRIVER_TYPES, PAY_TYPES } from '../../data/enums';
+import { title } from '../../lib/format';
 import DeptFeed from '../../components/DeptFeed';
 import ImportWizard from '../accounting/ImportWizard';
+import { useComplianceChips, ComplianceChips, CountBar } from '../../components/ChipStrips';
 
 export default function Drivers() {
   const { companyId, canEdit, user } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [filters, setFilters] = useState({});
+  const nav = useNavigate();
+  const chips = useComplianceChips('driver');
 
   const drivers = useQuery({
     queryKey: ['drivers', companyId],
@@ -27,6 +33,26 @@ export default function Drivers() {
 
   const editable = canEdit('safety');
 
+  const rows = useMemo(() => {
+    let list = drivers.data || [];
+    if (filters.status) list = list.filter((x) => x.status === filters.status);
+    if (filters.driver_type) list = list.filter((x) => x.driver_type === filters.driver_type);
+    return list;
+  }, [drivers.data, filters]);
+
+  const groups = useMemo(() => {
+    const all = drivers.data || [];
+    const cnt = (field) => {
+      const m = {};
+      all.forEach((x) => { m[x[field]] = (m[x[field]] || 0) + 1; });
+      return Object.entries(m).map(([key, n]) => ({ key, label: title(key), n }));
+    };
+    return [
+      { label: 'Status', field: 'status', rows: cnt('status') },
+      { label: 'Type', field: 'driver_type', rows: cnt('driver_type') },
+    ];
+  }, [drivers.data]);
+
   return (
     <>
       <div className="page-head">
@@ -36,12 +62,14 @@ export default function Drivers() {
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add driver</button>}
       </div>
       <ErrorNote error={drivers.error} />
+      <CountBar groups={groups} active={filters}
+        onPick={(field, val) => setFilters((f) => ({ ...f, [field]: val }))} />
       <div className="card" style={{ marginBottom: 16 }}>
         <table className="data">
-          <thead><tr><th>Name</th><th>Status</th><th>Type</th><th>Phone</th><th>CDL</th><th>Pay</th></tr></thead>
+          <thead><tr><th>Name</th><th>Status</th><th>Type</th><th>Phone</th><th>CDL</th><th>Pay</th><th>Compliances</th><th></th></tr></thead>
           <tbody>
-            {(drivers.data || []).map((d) => (
-              <tr key={d.id} onClick={() => editable && setOpen(d)}>
+            {rows.map((d) => (
+              <tr key={d.id} onClick={() => nav(`/safety/drivers/${d.id}`)}>
                 <td style={{ fontWeight: 600 }}>{d.full_name}</td>
                 <td><Chip value={d.status} /></td>
                 <td>{d.driver_type}</td>
@@ -52,11 +80,15 @@ export default function Drivers() {
                     : d.pay_rate_type === 'flat' ? 'flat'
                     : `$${d.pay_rate}/mi`}
                 </td>
+                <td><ComplianceChips items={chips.data?.[d.id]} /></td>
+                <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                  {editable && <button className="btn btn-ghost" onClick={() => setOpen(d)}>Edit</button>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {drivers.data?.length === 0 && <Empty head="No drivers yet" sub="Safety adds drivers here; dispatch assigns them to trucks." />}
+        {rows.length === 0 && <Empty head="No drivers yet" sub="Safety adds drivers here; dispatch assigns them to trucks." />}
       </div>
 
       <DeptFeed dept="safety" title="Safety — assistant activity" />

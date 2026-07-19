@@ -6,6 +6,7 @@ import { useAuth } from '../../app/AuthProvider';
 import { Chip, Drawer, Field, Empty, ErrorNote } from '../../components/ui';
 import { LOAD_STATUSES } from '../../data/enums';
 import BrokerEmail from '../../components/BrokerEmail';
+import { useLoadDocChips, DocChips } from '../../components/ChipStrips';
 import { money, dt } from '../../lib/format';
 
 const LOAD_COLS = `id, load_number, status, customer_load_id, dispatcher_id, pickup_time, delivery_time,
@@ -22,6 +23,7 @@ export default function Loads() {
   const [statusFilter, setStatusFilter] = useState('');
   const [open, setOpen] = useState(null);      // null | 'new' | {load} | {prefill, job}
   const [intake, setIntake] = useState(false); // rate-con intake drawer
+  const docChips = useLoadDocChips();
 
   const loads = useQuery({
     queryKey: ['loads', companyId, statusFilter],
@@ -63,7 +65,7 @@ export default function Loads() {
         <table className="data">
           <thead>
             <tr>
-              <th>#</th><th>Status</th><th>Customer</th><th>Ref</th><th>Pickup</th>
+              <th>#</th><th>Status</th><th>Docs</th><th>Customer</th><th>Ref</th><th>Pickup</th>
               <th>Delivery</th><th>Driver</th><th>Truck</th><th>Miles</th><th>Rate</th><th>Driver rate</th>
             </tr>
           </thead>
@@ -72,6 +74,7 @@ export default function Loads() {
               <tr key={l.id} onClick={() => editable && setOpen({ load: l })}>
                 <td className="num">{l.load_number}</td>
                 <td><Chip value={l.status} /></td>
+                <td><DocChips docs={docChips.data?.[l.id]} /></td>
                 <td>{l.customer?.name || '—'}</td>
                 <td>{l.customer_load_id || '—'}</td>
                 <td>{l.pickup_location || '—'}<div className="small muted">{dt(l.pickup_time)}</div></td>

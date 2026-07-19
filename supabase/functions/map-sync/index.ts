@@ -27,15 +27,63 @@ const CORS = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
+/** Roadmark's shop_type / category values → our kind enum. */
+const KIND_MAP: Record<string, string> = {
+  repair: 'repair_shop', 'repair shop': 'repair_shop', repair_shop: 'repair_shop',
+  mechanic: 'repair_shop', shop: 'repair_shop', truck_repair: 'repair_shop',
+  trailer_repair: 'repair_shop', diesel: 'repair_shop',
+  mobile: 'mobile_repair', 'mobile repair': 'mobile_repair', mobile_repair: 'mobile_repair',
+  roadservice: 'mobile_repair', road_service: 'mobile_repair',
+  tire: 'tire_shop', tires: 'tire_shop', tire_shop: 'tire_shop',
+  tow: 'towing', towing: 'towing', wrecker: 'towing', recovery: 'towing',
+  dealer: 'dealer', dealership: 'dealer', parts: 'dealer',
+  parking: 'parking', lot: 'parking',
+  truckstop: 'truck_stop', 'truck stop': 'truck_stop', truck_stop: 'truck_stop',
+  fuel: 'fuel', fuel_stop: 'fuel',
+  scale: 'weigh_station', weigh: 'weigh_station', weigh_station: 'weigh_station',
+};
+const toKind = (v: unknown, fallback: string) => {
+  const k = String(v ?? '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+  return KIND_MAP[k] ?? KIND_MAP[k.replace(/_/g, ' ')] ?? fallback;
+};
+
+/** Ownership words that say nothing about what the shop does. */
+const OWNERSHIP_WORDS = new Set(['chain', 'independent', 'community', 'franchise', 'mechanic', 'shop']);
+
+/** A shop's real speciality decides the pin: tyres, towing, mobile, dealer — else repair. */
+function kindFromSpecialties(list: string[] | null, shopType: unknown, fallback: string) {
+  const hay = (list ?? []).join(' ').toLowerCase();
+  if (/\btow|wrecker|recovery/.test(hay)) return 'towing';
+  if (/\btire|tyre/.test(hay)) return 'tire_shop';
+  if (/mobile|road ?service|on.?site/.test(hay)) return 'mobile_repair';
+  if (/dealer|dealership|parts counter/.test(hay)) return 'dealer';
+  if (/parking|overnight lot/.test(hay)) return 'parking';
+  if (/truck ?stop|fuel/.test(hay)) return 'truck_stop';
+  const st = String(shopType ?? '').toLowerCase().trim();
+  if (st && !OWNERSHIP_WORDS.has(st)) return toKind(st, fallback);
+  return fallback;
+}
+
 /** Roadmark's columns may not match ours — map generously, tolerate what's missing. */
 function normalize(row: Record<string, any>, kind: string) {
   const lat = row.lat ?? row.latitude ?? row.location_lat ?? row.geo_lat;
   const lng = row.lng ?? row.lon ?? row.longitude ?? row.location_lng ?? row.geo_lng;
   if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+  const services = (() => {
+    const raw = row.services ?? row.specialties;
+    if (Array.isArray(raw)) return raw.map((x: unknown) => String(x));
+    if (typeof raw === 'string' && raw.trim()) {
+      return raw.replace(/^{|}$/g, '').split(',').map((x: string) => x.trim().replace(/^"|"$/g, ''));
+    }
+    return null;
+  })();
+
   return {
     source: 'roadmark',
     external_id: String(row.id ?? row.uuid ?? row.place_id ?? ''),
-    kind: row.kind ?? row.category ?? kind,
+    kind: row.kind ?? row.category
+      ? toKind(row.kind ?? row.category, kind)
+      : kindFromSpecialties(services, row.shop_type, kind),
     name: row.name ?? row.title ?? row.business_name ?? 'Unnamed',
     lat, lng,
     address: row.address ?? row.street ?? row.address_line1 ?? null,
@@ -44,14 +92,23 @@ function normalize(row: Record<string, any>, kind: string) {
     zip: row.zip ?? row.postal_code ?? null,
     phone: row.phone ?? row.phone_number ?? null,
     website: row.website ?? row.url ?? null,
-    hours: typeof row.hours === 'string' ? row.hours
+    hours: row.open_24 ? 'Open 24 hours'
+      : typeof row.hours === 'string' ? row.hours
+      : (row.hours_weekday || row.hours_sat || row.hours_sun)
+        ? [row.hours_weekday && `Mon–Fri ${row.hours_weekday}`,
+           row.hours_sat && `Sat ${row.hours_sat}`,
+           row.hours_sun && `Sun ${row.hours_sun}`].filter(Boolean).join(' · ')
       : row.hours ? JSON.stringify(row.hours) : null,
-    services: Array.isArray(row.services) ? row.services
-      : typeof row.services === 'string' ? row.services.split(',').map((s: string) => s.trim())
-      : null,
-    rating: typeof row.rating === 'number' ? row.rating : null,
+    services,
+    rating: typeof row.rating === 'number' ? row.rating
+      : typeof row.avg_rating === 'number' ? row.avg_rating : null,
     reviews_count: typeof row.reviews_count === 'number' ? row.reviews_count
       : typeof row.review_count === 'number' ? row.review_count : null,
+    note: [
+      row.brand ? `Brand: ${row.brand}` : null,
+      row.shop_type ? `Type: ${row.shop_type}` : null,
+      row.description ?? row.owner_note ?? null,
+    ].filter(Boolean).join(' · ') || null,
     company_id: null,
     updated_at: new Date().toISOString(),
   };
@@ -64,10 +121,12 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const body = await req.json().catch(() => ({}));
     const { full = false, push_only = false } = body as { full?: boolean; push_only?: boolean };
-    const tables = (body as any).tables ?? [
-      { name: 'shops', kind: 'repair_shop' },
-      { name: 'dealers', kind: 'dealer' },
-    ];
+    // Roadmark's real layout: shops carry their own shop_type, parking is its own table.
+    const tables: Array<{ name: string; kind: string; status?: string; status_in?: string[] }> =
+      (body as any).tables ?? [
+        { name: 'shops', kind: 'repair_shop' },
+        { name: 'parking', kind: 'parking' },
+      ];
 
     const report: Record<string, unknown> = {};
 
@@ -88,9 +147,19 @@ Deno.serve(async (req) => {
 
         for (const t of tables) {
           try {
-            let q = rm.from(t.name).select('*').limit(5000);
-            if (since) q = q.gt('updated_at', since);
-            const { data, error } = await q;
+            const build = (useSince: boolean) => {
+              let q = rm.from(t.name).select('*').limit(10000);
+              // only take rows this table considers live, when a status filter is given
+              if (t.status_in?.length) q = q.in('status', t.status_in);
+              else if (t.status) q = q.eq('status', t.status);
+              if (useSince && since) q = q.gt('updated_at', since);
+              return q;
+            };
+            let { data, error } = await build(true);
+            // tables without an updated_at column can't do incremental — fall back to full
+            if (error && /updated_at/i.test(error.message || '')) {
+              ({ data, error } = await build(false));
+            }
             if (error) { errors.push(`${t.name}: ${error.message}`); continue; }
 
             const rows = (data ?? []).map((r: any) => normalize(r, t.kind)).filter(Boolean);
