@@ -19,6 +19,9 @@ const NAV = [
   { section: 'Accounting', items: [
     { to: '/accounting/loads', label: 'Loads', dept: 'accounting' },
     { to: '/accounting/settlements', label: 'Settlements', dept: 'accounting' },
+    { to: '/accounting/invoices', label: 'Invoices', dept: 'accounting' },
+    { to: '/accounting/payroll', label: 'Payroll', dept: 'accounting' },
+    { to: '/admin', label: 'Company & users' },
   ]},
   { section: 'Safety', items: [
     { to: '/safety/drivers', label: 'Drivers', dept: 'safety' },
@@ -26,19 +29,16 @@ const NAV = [
     { to: '/safety/compliance', label: 'Compliance', dept: 'safety' },
   ]},
   { section: 'Fleet', items: [
+    { to: '/fleet/cases', label: 'Repair cases', dept: 'maintenance' },
+    { to: '/fleet/assignments', label: 'Assignments', dept: 'fleet' },
     { to: '/fleet/trucks', label: 'Trucks', dept: 'fleet' },
     { to: '/fleet/trailers', label: 'Trailers', dept: 'fleet' },
     { to: '/fleet/maintenance', label: 'Maintenance history', dept: 'maintenance' },
     { to: '/fleet/vendors', label: 'Maintenance vendors', dept: 'maintenance' },
   ]},
   { section: 'Admin', items: [
-    { to: '/fleet/cases', label: 'Repair cases', dept: 'maintenance' },
-    { to: '/fleet/assignments', label: 'Assignments', dept: 'fleet' },
     { to: '/tracking', label: 'Live map', dept: 'tracking' },
-    { to: '/accounting/invoices', label: 'Invoices', dept: 'accounting' },
-    { to: '/accounting/payroll', label: 'Payroll', dept: 'accounting' },
     { to: '/assistants', label: 'Assistants' },
-    { to: '/admin', label: 'Company & users' },
     { to: '/admin/integrations', label: 'ELD' },
     { to: '/admin/assistants', label: 'Telegram' },
     { to: '/admin/email', label: 'Broker email' },

@@ -16,6 +16,7 @@ import Assignments from './pages/fleet/Assignments';
 import Cases from './pages/fleet/Cases';
 import Maintenance from './pages/maintenance/Maintenance';
 import Vendors from './pages/fleet/Vendors';
+import UnitDetail from './pages/fleet/UnitDetail';
 import AccountingLoads from './pages/accounting/AccountingLoads';
 import SettlementsHub from './pages/accounting/SettlementsHub';
 import Invoices from './pages/accounting/Invoices';
@@ -67,7 +68,9 @@ export default function App() {
               <Route path="/safety/compliance" element={<Compliance />} />
               <Route path="/safety/insurance" element={<Insurance />} />
               <Route path="/fleet/trucks" element={<Units kind="trucks" />} />
+              <Route path="/fleet/trucks/:id" element={<UnitDetail kind="truck" />} />
               <Route path="/fleet/trailers" element={<Units kind="trailers" />} />
+              <Route path="/fleet/trailers/:id" element={<UnitDetail kind="trailer" />} />
               <Route path="/fleet/units" element={<Units />} />
               <Route path="/fleet/vendors" element={<Vendors />} />
               <Route path="/fleet/assignments" element={<Assignments />} />

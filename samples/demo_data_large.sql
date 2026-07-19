@@ -368,3 +368,17 @@ union all select '  invoiced unpaid', count(*) from loads where company_id='1111
 union all select '  not invoiced', count(*) from loads where company_id='11111111-1111-1111-1111-111111111111' and status='delivered'
 union all select 'repair cases', count(*) from repair_cases where company_id='11111111-1111-1111-1111-111111111111'
 union all select 'invoices', count(*) from invoices where company_id='11111111-1111-1111-1111-111111111111';
+
+-- ---------- PM schedules + odometer trail (so the unit Service bar has data) ----------
+do $$
+declare cid uuid := '11111111-1111-1111-1111-111111111111'; t record; i int := 0; base int;
+begin
+  for t in select id from trucks where company_id = cid order by unit_number loop
+    i := i + 1;
+    base := 180000 + (i * 14300);
+    insert into pm_schedules (company_id, unit_type, truck_id, name, kind, interval_miles, last_done_odometer, last_done_date)
+    values (cid, 'truck', t.id, 'PM Service', 'pm', 25000, base, current_date - (20 + i));
+    insert into odometer_readings (company_id, truck_id, reading, source, recorded_at)
+    values (cid, t.id, base + (case when i % 6 = 0 then 26800 else 9000 + (i * 640) end), 'eld', now() - interval '2 hours');
+  end loop;
+end $$;

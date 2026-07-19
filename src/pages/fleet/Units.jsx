@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../app/AuthProvider';
 import { Drawer, Field, Empty, ErrorNote, Chip } from '../../components/ui';
@@ -10,7 +11,11 @@ import ImportWizard from '../accounting/ImportWizard';
 export default function Units({ kind }) {
   const { companyId, canEdit, user } = useAuth();
   const qc = useQueryClient();
+  const nav = useNavigate();
   const [tab, setTab] = useState(kind || 'trucks');
+  // the route drives the tab, so Trucks / Trailers in the sidebar actually switch
+  useEffect(() => { if (kind && kind !== tab) setTab(kind); }, [kind]);
+  const pick = (next) => { setTab(next); nav(`/fleet/${next}`); };
   const [open, setOpen] = useState(null);
   const [importing, setImporting] = useState(false);
   const table = tab; // 'trucks' | 'trailers'
@@ -35,12 +40,10 @@ export default function Units({ kind }) {
     <>
       <div className="page-head">
         <h2>{tab === 'trucks' ? 'Trucks' : 'Trailers'}</h2>
-        {!kind && (
-          <div className="seg">
-            <button className={tab === 'trucks' ? 'on' : ''} onClick={() => setTab('trucks')}>Trucks</button>
-            <button className={tab === 'trailers' ? 'on' : ''} onClick={() => setTab('trailers')}>Trailers</button>
-          </div>
-        )}
+        <div className="seg">
+          <button className={tab === 'trucks' ? 'on' : ''} onClick={() => pick('trucks')}>Trucks</button>
+          <button className={tab === 'trailers' ? 'on' : ''} onClick={() => pick('trailers')}>Trailers</button>
+        </div>
         <div className="spacer" />
         {editable && <button className="btn btn-ghost" onClick={() => setImporting(true)}>Import CSV</button>}
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add {tab.slice(0, -1)}</button>}
@@ -48,10 +51,10 @@ export default function Units({ kind }) {
       <ErrorNote error={units.error} />
       <div className="card" style={{ marginBottom: 16 }}>
         <table className="data">
-          <thead><tr><th>Unit #</th><th>Status</th><th>Type</th><th>Ownership</th><th>VIN</th><th>Plate</th><th>Leasor</th></tr></thead>
+          <thead><tr><th>Unit #</th><th>Status</th><th>Type</th><th>Ownership</th><th>VIN</th><th>Plate</th><th>Leasor</th><th></th></tr></thead>
           <tbody>
             {(units.data || []).map((u) => (
-              <tr key={u.id} onClick={() => editable && setOpen(u)}>
+              <tr key={u.id} onClick={() => nav(`/fleet/${table}/${u.id}`)}>
                 <td className="num" style={{ fontWeight: 700 }}>{u.unit_number}</td>
                 <td><Chip value={u.status} /></td>
                 <td>{u[typeCol]}</td>
@@ -59,6 +62,9 @@ export default function Units({ kind }) {
                 <td className="small">{u.vin || '—'}</td>
                 <td>{u.plate ? `${u.plate} (${u.plate_state || '—'})` : '—'}</td>
                 <td>{u.leasor || '—'}</td>
+                <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                  {editable && <button className="btn btn-ghost" onClick={() => setOpen(u)}>Edit</button>}
+                </td>
               </tr>
             ))}
           </tbody>
