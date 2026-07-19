@@ -20,13 +20,29 @@ const json = (b: unknown, s = 200) =>
 
 const BOT = Deno.env.get('TELEGRAM_BOT_TOKEN');
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/* Telegram allows ~30 sends/second across all chats. A fleet-wide reminder burst
+   (500 trucks at 07:00) would blow straight through that, so sends are spaced out.
+   At 12/second there is comfortable headroom and 500 groups take ~40 seconds. */
+const SEND_GAP_MS = 80;
+
 async function tgSend(chat_id: number, text: string) {
   if (!BOT) return false;
-  const r = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id, text, parse_mode: 'HTML', disable_web_page_preview: true }),
-  });
-  return (await r.json())?.ok === true;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+    });
+    if (r.status === 429) {
+      const j = await r.json().catch(() => ({}));
+      const wait = ((j?.parameters?.retry_after ?? 2) + 1) * 1000;
+      await sleep(wait);
+      continue;                       // Telegram told us exactly how long to wait
+    }
+    return (await r.json())?.ok === true;
+  }
+  return false;
 }
 
 /** @usernames for the given departments (+ optionally the driver). */
@@ -203,6 +219,8 @@ Deno.serve(async (req) => {
         posted = await tgSend(chat_id,
           `⏰ <b>${r.title}</b>` + (r.body ? `\n${r.body}` : '') + (tags ? `\n${tags}` : ''));
       }
+
+      if (chat_id) await sleep(SEND_GAP_MS);   // stay well under the global send limit
 
       await db.from('reminders').update({
         status: 'sent', sent_at: new Date().toISOString(), telegram_chat_id: chat_id,

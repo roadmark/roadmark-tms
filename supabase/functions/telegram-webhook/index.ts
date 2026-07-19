@@ -148,6 +148,9 @@ async function logAction(db: ReturnType<typeof admin>, row: Record<string, unkno
 }
 
 /* ------------------------------- main ------------------------------- */
+/* Telegram retries an update if the webhook is slow to answer, which would double-post
+   BOL prompts. So: answer instantly, then do the work in the background, and ignore any
+   update_id we have already seen. */
 Deno.serve(async (req) => {
   const secret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
   if (secret && req.headers.get('X-Telegram-Bot-Api-Secret-Token') !== secret) {
@@ -156,7 +159,23 @@ Deno.serve(async (req) => {
 
   let update: any;
   try { update = await req.json(); } catch { return ok(); }
+
+  const work = handle(update).catch((e) => console.error('telegram-webhook error', e));
+  // deno-lint-ignore no-explicit-any
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(work); else await work;
+  return ok();
+});
+
+async function handle(update: any) {
   const db = admin();
+
+  // de-duplicate retried updates
+  const updateId = update.update_id;
+  if (typeof updateId === 'number') {
+    const { error: dupErr } = await db.from('telegram_updates').insert({ update_id: updateId });
+    if (dupErr) return;            // already processed this one
+  }
 
   try {
     /* ---------- button presses (BOL approval) ---------- */
@@ -167,9 +186,9 @@ Deno.serve(async (req) => {
 
       const { data: action } = await db.from('assistant_actions')
         .select('*').eq('id', actionId).maybeSingle();
-      if (!action) { await answerCb(cb.id, 'This request has expired.'); return ok(); }
+      if (!action) { await answerCb(cb.id, 'This request has expired.'); return; }
       if (action.status !== 'awaiting_approval') {
-        await answerCb(cb.id, 'Already handled.'); return ok();
+        await answerCb(cb.id, 'Already handled.'); return;
       }
 
       // only dispatch (or an admin) may decide
@@ -188,7 +207,7 @@ Deno.serve(async (req) => {
       }
       if (!allowed) {
         await answerCb(cb.id, 'Only the dispatcher can approve this.');
-        return ok();
+        return;
       }
 
       if (verb === 'no') {
@@ -198,7 +217,7 @@ Deno.serve(async (req) => {
         await answerCb(cb.id, 'Cancelled — nothing sent.');
         await editText(chat_id, cb.message.message_id,
           `${cb.message.text}\n\n❌ Cancelled by ${who?.display_name || 'dispatcher'} — nothing was sent.`);
-        return ok();
+        return;
       }
 
       // YES — attach the BOL, mark loaded, and reply-all into the broker chain
@@ -254,12 +273,12 @@ Deno.serve(async (req) => {
       await answerCb(cb.id, 'Approved');
       await editText(chat_id, cb.message.message_id,
         `${cb.message.text}\n\n✅ Approved by ${who?.display_name || 'dispatcher'}. BOL attached and load marked loaded.${mailNote}`);
-      return ok();
+      return;
     }
 
     /* ---------- ordinary messages ---------- */
     const msg = update.message ?? update.edited_message ?? update.channel_post;
-    if (!msg) return ok();
+    if (!msg) return;
     const chat_id = msg.chat.id;
     const text: string = msg.text || msg.caption || '';
     const ctx = await groupContext(db, chat_id);
@@ -267,28 +286,28 @@ Deno.serve(async (req) => {
     // --- /link 4114 : bind this group to a truck ---
     if (/^\/link\b/i.test(text)) {
       const unit = text.split(/\s+/)[1];
-      if (!unit) { await send(chat_id, 'Use: <code>/link 4114</code> (the truck number).'); return ok(); }
+      if (!unit) { await send(chat_id, 'Use: <code>/link 4114</code> (the truck number).'); return; }
       const { data: truck } = await db.from('trucks')
         .select('id, unit_number, company_id').eq('unit_number', unit).limit(1).maybeSingle();
-      if (!truck) { await send(chat_id, `No truck <b>${unit}</b> found in the TMS.`); return ok(); }
+      if (!truck) { await send(chat_id, `No truck <b>${unit}</b> found in the TMS.`); return; }
       await db.from('telegram_groups').upsert({
         chat_id, company_id: truck.company_id, title: msg.chat.title || unit,
         truck_id: truck.id, active: true, updated_at: new Date().toISOString(),
       }, { onConflict: 'chat_id' });
       await send(chat_id, `✅ Linked to truck <b>${truck.unit_number}</b>. Send the BOL after loading, PTI photos in the morning, and tell us straight away if anything happens on the road.`);
-      return ok();
+      return;
     }
 
     // --- /register : map this Telegram user to a person ---
     if (/^\/register\b/i.test(text)) {
-      if (!ctx.group?.company_id) { await send(chat_id, 'Link this group to a truck first: <code>/link 4114</code>'); return ok(); }
+      if (!ctx.group?.company_id) { await send(chat_id, 'Link this group to a truck first: <code>/link 4114</code>'); return; }
       await db.from('telegram_identities').upsert({
         company_id: ctx.group.company_id, telegram_user_id: msg.from.id,
         username: msg.from.username ?? null,
         display_name: [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' '),
       }, { onConflict: 'company_id,telegram_user_id' });
       await send(chat_id, `👋 Registered <b>${msg.from.first_name || 'you'}</b>. Someone in the office will connect you to your driver or staff record in Admin → Assistants.`);
-      return ok();
+      return;
     }
 
     if (/^\/help\b/i.test(text) || /^\/start\b/i.test(text)) {
@@ -299,10 +318,10 @@ Deno.serve(async (req) => {
         '• Send the <b>BOL</b> photo after loading (caption "bol")\n' +
         '• Send <b>PTI</b> photos with caption "pti"\n' +
         '• If anything happens on the road, just write it — the office is alerted instantly');
-      return ok();
+      return;
     }
 
-    if (!ctx.group?.company_id) return ok();       // unlinked group: stay quiet
+    if (!ctx.group?.company_id) return;            // unlinked group: stay quiet
     const company_id = ctx.group.company_id;
 
     /* ---------- accident detection (runs on every text) ---------- */
@@ -342,21 +361,21 @@ Deno.serve(async (req) => {
           payload: { incident_id: inc?.id, text: text.slice(0, 300) },
           sent_at: new Date().toISOString(),
         });
-        return ok();
+        return;
       }
     }
 
     /* ---------- photos / documents ---------- */
     const photo = msg.photo?.length ? msg.photo[msg.photo.length - 1] : null;
     const doc = msg.document;
-    if (!photo && !doc) return ok();
+    if (!photo && !doc) return;
 
     const wantsPti = /\bpti\b|pre.?trip|inspection/i.test(text);
     const wantsBol = /\bbol\b|bill of lading|loaded/i.test(text);
     if (!wantsPti && !wantsBol) {
       // ask once rather than guess
       await send(chat_id, 'Got the photo 📷 — is it the <b>BOL</b> or the <b>PTI</b>? Reply with the word, or add it as the caption next time.');
-      return ok();
+      return;
     }
 
     const file_id = photo?.file_id || doc?.file_id;
@@ -373,50 +392,96 @@ Deno.serve(async (req) => {
       ? { type: 'document', source: { type: 'base64', media_type: mediaType, data: b64 } }
       : { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } };
 
-    /* ---------- PTI screening ---------- */
+    /* ---------- PTI screening (batched) ---------- */
     if (wantsPti) {
+      const groupId = msg.media_group_id ? String(msg.media_group_id) : null;
+
+      // Telegram delivers each photo of a batch as its own update. The first one
+      // creates the inspection and waits a moment for its siblings; the rest just
+      // attach themselves. One AI call for the whole walk-around instead of eight.
+      if (groupId) {
+        const { data: existing } = await db.from('pti_inspections')
+          .select('id, image_paths').eq('company_id', company_id)
+          .eq('media_group_id', groupId)
+          .gte('created_at', new Date(Date.now() - 10 * 60000).toISOString())
+          .maybeSingle();
+        if (existing) {
+          await db.from('pti_inspections').update({
+            image_paths: [...(existing.image_paths ?? []), path],
+          }).eq('id', existing.id);
+          return;                       // the first update will analyse the batch
+        }
+      }
+
       const { data: insp } = await db.from('pti_inspections').insert({
         company_id, truck_id: ctx.truck?.id ?? null, driver_id: ctx.driver?.id ?? null,
-        telegram_chat_id: chat_id, image_paths: [path], result: 'pending',
+        telegram_chat_id: chat_id, media_group_id: groupId,
+        image_paths: [path], result: 'pending',
       }).select('id').single();
+
+      // give the rest of the batch a few seconds to land
+      if (groupId) await new Promise((r) => setTimeout(r, 7000));
+
+      const { data: full } = await db.from('pti_inspections')
+        .select('image_paths').eq('id', insp?.id).maybeSingle();
+      const paths: string[] = (full?.image_paths ?? [path]).slice(0, 10);
+
+      const blocks: unknown[] = [];
+      for (const p of paths) {
+        try {
+          const { data: f } = await db.storage.from('company-docs').download(p);
+          if (!f) continue;
+          const b = new Uint8Array(await f.arrayBuffer());
+          const ex = p.split('.').pop()?.toLowerCase();
+          blocks.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: ex === 'png' ? 'image/png' : 'image/jpeg',
+              data: encodeBase64(b),
+            },
+          });
+        } catch (_) { /* skip unreadable file */ }
+      }
 
       let analysis: any = null;
       try {
         analysis = parseJson(await claude({
-          model: 'claude-sonnet-4-6', max_tokens: 1000, temperature: 0,
-          messages: [{ role: 'user', content: [fileBlock, { type: 'text', text:
-`Screen this pre-trip inspection photo of a commercial truck/trailer for VISIBLE DOT
-problems only: tire condition (flat, visibly bald, cord showing, sidewall damage),
-lights and lens damage, windshield cracks in the wiper path, mirrors, visible fluid
-leaks, damaged air lines, missing mudflaps, insecure load, body damage.
+          model: 'claude-sonnet-4-6', max_tokens: 1200, temperature: 0,
+          messages: [{ role: 'user', content: [...blocks, { type: 'text', text:
+`These ${blocks.length} photo(s) are a driver's pre-trip inspection of a commercial
+truck/trailer. Screen them together for VISIBLE DOT problems only: tire condition (flat,
+visibly bald, cord showing, sidewall damage), lights and lens damage, windshield cracks in
+the wiper path, mirrors, visible fluid leaks, damaged air lines, missing mudflaps,
+insecure load, body damage.
 
 Report only what is clearly visible. Do NOT guess tread depth or brake condition.
 Respond ONLY as JSON:
 {"violations":[{"code":"tire_tread|light_lens|windshield|leak|airline|mudflap|securement|body|other",
-"label":"short description","severity":"out_of_service|violation|warn","confidence":0.0}],
-"notes":"one sentence"}` }] }],
+"label":"short description","severity":"out_of_service|violation|warn","confidence":0.0,
+"image_index":0}],"notes":"one sentence"}` }] }],
         }));
       } catch (_) { /* fall through to failed */ }
 
       const violations = analysis?.violations ?? [];
       const result = !analysis ? 'failed_analysis' : violations.length ? 'flagged' : 'pass';
       await db.from('pti_inspections').update({
-        analysis, violations, result,
-        departments: ['safety', 'maintenance'],
+        analysis, violations, result, departments: ['safety', 'maintenance'],
       }).eq('id', insp?.id);
 
+      const photoWord = `${paths.length} photo${paths.length === 1 ? '' : 's'}`;
       if (result === 'pass') {
-        await send(chat_id, `🛞 PTI received for truck ${ctx.truck?.unit_number ?? '?'} — <b>no visible issues</b>. Logged for safety. Drive safe.`);
+        await send(chat_id, `🛞 PTI received for truck ${ctx.truck?.unit_number ?? '?'} (${photoWord}) — <b>no visible issues</b>. Logged for safety. Drive safe.`);
       } else if (result === 'flagged') {
         const tags = await mentions(db, company_id, ['safety', 'maintenance', 'dispatch']);
         const list = violations.map((v: any) =>
           `• ${v.label} <i>(${v.severity}, confidence ${Math.round((v.confidence ?? 0) * 100)}%)</i>`).join('\n');
         await send(chat_id,
-          `🛞⚠️ <b>PTI — possible issues</b> on truck ${ctx.truck?.unit_number ?? '?'}\n${list}\n\n` +
+          `🛞⚠️ <b>PTI — possible issues</b> on truck ${ctx.truck?.unit_number ?? '?'} (${photoWord})\n${list}\n\n` +
           `Please verify before rolling. Safety and maintenance have been notified.` +
           (tags ? `\n${tags}` : ''));
       } else {
-        await send(chat_id, `🛞 PTI photo saved for truck ${ctx.truck?.unit_number ?? '?'}, but automatic screening failed. Safety will review it by hand.`);
+        await send(chat_id, `🛞 PTI photos saved for truck ${ctx.truck?.unit_number ?? '?'}, but automatic screening failed. Safety will review them by hand.`);
       }
 
       await logAction(db, {
@@ -424,12 +489,12 @@ Respond ONLY as JSON:
         truck_id: ctx.truck?.id ?? null, driver_id: ctx.driver?.id ?? null,
         telegram_chat_id: chat_id, departments: ['safety', 'maintenance'],
         summary: result === 'flagged'
-          ? `PTI flagged on truck ${ctx.truck?.unit_number ?? '?'} — ${violations.length} possible issue(s)`
-          : result === 'pass' ? `PTI clear on truck ${ctx.truck?.unit_number ?? '?'}`
+          ? `PTI flagged on truck ${ctx.truck?.unit_number ?? '?'} — ${violations.length} possible issue(s) across ${photoWord}`
+          : result === 'pass' ? `PTI clear on truck ${ctx.truck?.unit_number ?? '?'} (${photoWord})`
           : `PTI screening failed on truck ${ctx.truck?.unit_number ?? '?'}`,
-        payload: { pti_id: insp?.id, path }, sent_at: new Date().toISOString(),
+        payload: { pti_id: insp?.id, paths }, sent_at: new Date().toISOString(),
       });
-      return ok();
+      return;
     }
 
     /* ---------- BOL ---------- */
@@ -453,7 +518,7 @@ Respond ONLY as JSON:
 
     if (!bol) {
       await send(chat_id, '📄 BOL saved, but I could not read it automatically. Dispatch will handle it by hand.');
-      return ok();
+      return;
     }
 
     // compare against the rate confirmation data we already hold
@@ -497,9 +562,8 @@ Respond ONLY as JSON:
         { text: '✖️ No', callback_data: `no:${actionId}` },
       ]],
     });
-    return ok();
+    return;
   } catch (e) {
     console.error('telegram-webhook error', e);
-    return ok();   // always 200 so Telegram doesn't retry forever
   }
-});
+}

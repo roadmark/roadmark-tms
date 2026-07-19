@@ -53,8 +53,10 @@ export default function Payroll() {
   return (
     <>
       <div className="page-head" style={{ marginBottom: 12 }}>
-        <button className={`btn ${view === 'runs' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setView('runs')}>Payroll runs</button>
-        <button className={`btn ${view === 'staff' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setView('staff')}>Office staff</button>
+        <div className="seg">
+          <button className={view === 'runs' ? 'on' : ''} onClick={() => setView('runs')}>Payroll runs</button>
+          <button className={view === 'staff' ? 'on' : ''} onClick={() => setView('staff')}>Office staff</button>
+        </div>
         <div className="spacer" />
         {editable && view === 'staff' && <button className="btn btn-primary" onClick={() => setEmpOpen('new')}>Add employee</button>}
         {editable && view === 'runs' && <button className="btn btn-primary" onClick={() => setRunOpen(true)}>New payroll run</button>}

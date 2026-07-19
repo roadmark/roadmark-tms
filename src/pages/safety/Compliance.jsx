@@ -82,10 +82,12 @@ export default function Compliance() {
     <>
       <div className="page-head">
         <h2>Compliance</h2>
-        {['driver', 'truck', 'trailer'].map((t) => (
-          <button key={t} className={`btn ${entityType === t ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setEntityType(t)}>{t}s</button>
-        ))}
+        <div className="seg">
+          {['driver', 'truck', 'trailer'].map((t) => (
+            <button key={t} className={entityType === t ? 'on' : ''}
+              onClick={() => setEntityType(t)}>{t}s</button>
+          ))}
+        </div>
         <div className="spacer" />
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add item</button>}
       </div>

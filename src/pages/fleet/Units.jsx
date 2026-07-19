@@ -35,8 +35,10 @@ export default function Units() {
     <>
       <div className="page-head">
         <h2>Trucks &amp; trailers</h2>
-        <button className={`btn ${tab === 'trucks' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('trucks')}>Trucks</button>
-        <button className={`btn ${tab === 'trailers' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('trailers')}>Trailers</button>
+        <div className="seg">
+          <button className={tab === 'trucks' ? 'on' : ''} onClick={() => setTab('trucks')}>Trucks</button>
+          <button className={tab === 'trailers' ? 'on' : ''} onClick={() => setTab('trailers')}>Trailers</button>
+        </div>
         <div className="spacer" />
         {editable && <button className="btn btn-ghost" onClick={() => setImporting(true)}>Import CSV</button>}
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add {tab.slice(0, -1)}</button>}

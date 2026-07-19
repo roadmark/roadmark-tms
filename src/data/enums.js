@@ -11,12 +11,12 @@ export const MAINT_STATUSES = ['in_progress','to_be_paid','check','on_hold','pai
 export const DEDUCTION_CATEGORIES = ['maintenance','efs','fuel','toll','drug_test','late_fee','missed_appointment','registration','advance','escrow','damage','citation','other'];
 
 export const STATUS_CHIP = {
-  scheduled: 'blue', in_progress: 'yellow', delivered: 'green', invoiced: 'purple',
+  scheduled: 'blue', in_progress: 'amber', delivered: 'green', invoiced: 'purple',
   payment_pending: 'orange', completed: 'green', cancelled: 'gray', tonu: 'red',
-  active: 'green', ready: 'blue', at_leave: 'yellow', terminated: 'gray',
+  active: 'green', ready: 'blue', at_leave: 'amber', terminated: 'gray',
   applicant: 'cyan', approved: 'blue', shop: 'orange', for_shop: 'orange',
-  for_check: 'yellow', crash: 'red', recovery: 'purple', not_used: 'gray',
-  pending: 'yellow', unusable: 'red', rented: 'cyan', rejected: 'red', ex_applicant: 'gray',
-  open: 'yellow', closed: 'green', paid: 'green', in_progress_m: 'yellow',
-  sent: 'green', flagged: 'red', pass: 'green', awaiting_approval: 'yellow',
+  for_check: 'amber', crash: 'red', recovery: 'purple', not_used: 'gray',
+  pending: 'amber', unusable: 'red', rented: 'cyan', rejected: 'red', ex_applicant: 'gray',
+  open: 'amber', closed: 'green', paid: 'green', in_progress_m: 'amber',
+  sent: 'green', flagged: 'red', pass: 'green', awaiting_approval: 'purple',
 };

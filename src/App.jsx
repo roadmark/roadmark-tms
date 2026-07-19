@@ -13,6 +13,7 @@ import Compliance from './pages/safety/Compliance';
 import Insurance from './pages/safety/Insurance';
 import Units from './pages/fleet/Units';
 import Assignments from './pages/fleet/Assignments';
+import Cases from './pages/fleet/Cases';
 import Maintenance from './pages/maintenance/Maintenance';
 import Accounting from './pages/accounting/Accounting';
 import TrackTrace from './pages/tracking/TrackTrace';
@@ -63,6 +64,7 @@ export default function App() {
               <Route path="/safety/insurance" element={<Insurance />} />
               <Route path="/fleet/units" element={<Units />} />
               <Route path="/fleet/assignments" element={<Assignments />} />
+              <Route path="/fleet/cases" element={<Cases />} />
               <Route path="/maintenance" element={<Maintenance />} />
               <Route path="/accounting" element={<Accounting />} />
               <Route path="/tracking" element={<TrackTrace />} />

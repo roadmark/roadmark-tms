@@ -31,10 +31,12 @@ export default function Accounting() {
     <>
       <div className="page-head">
         <h2>Accounting</h2>
-        {TABS.map((t) => (
-          <button key={t.id} className={`btn ${tab === t.id ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setTab(t.id)}>{t.label}</button>
-        ))}
+        <div className="seg">
+          {TABS.map((t) => (
+            <button key={t.id} className={tab === t.id ? 'on' : ''}
+              onClick={() => setTab(t.id)}>{t.label}</button>
+          ))}
+        </div>
         <div className="spacer" />
         {editable && tab === 'fuel' && (
           <button className="btn btn-primary" onClick={() => setImportKind('fuel')}>Import fuel CSV</button>
