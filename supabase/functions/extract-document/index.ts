@@ -58,6 +58,34 @@ Respond with ONLY JSON (no fences): {"shipper": string, "consignee": string,
 "special_instructions": string, "bol_number": string,
 "confidence": {"delivery_address": number, "appointment": number, "commodity": number}}`;
 
+const REPAIR_PROMPT = `You parse truck/trailer repair shop invoices for a trucking company's TMS.
+Read the invoice and respond with ONLY a JSON object — no markdown fences, no commentary.
+
+Schema:
+{
+  "vendor_name": string,             // repair shop name
+  "vendor_city": string,
+  "vendor_state": string,            // 2-letter, "" if unknown
+  "invoice_number": string,
+  "invoice_date": string,            // YYYY-MM-DD or ""
+  "unit_number": string,             // truck/trailer unit number if shown
+  "vin_partial": string,             // VIN or last digits if shown
+  "odometer": number | null,
+  "tasks": [                         // every labor/part line item
+    {"description": string, "quantity": number, "unit_price": number, "amount": number}
+  ],
+  "subtotal": number,
+  "tax": number,
+  "fees": number,                    // shop/enviro/supply fees
+  "total": number,
+  "payment_hint": "efs" | "credit_card" | "bank" | "cash" | "check" | "unknown",
+  "confidence": {"vendor_name": number, "invoice_number": number, "total": number, "tasks": number}
+}
+
+Rules: amounts in USD numbers. If line items are grouped, keep them as shown. Never
+invent numbers; missing values are "" / null / 0 with low confidence. subtotal+tax+fees
+should equal total when the document allows it.`;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
@@ -118,7 +146,9 @@ Deno.serve(async (req) => {
       ? { type: 'document', source: { type: 'base64', media_type: mediaType, data: b64 } }
       : { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } };
 
-    const prompt = job.kind === 'bol' ? BOL_PROMPT : RATE_CON_PROMPT;
+    const prompt = job.kind === 'bol' ? BOL_PROMPT
+      : job.kind === 'repair_invoice' ? REPAIR_PROMPT
+      : RATE_CON_PROMPT;
 
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
