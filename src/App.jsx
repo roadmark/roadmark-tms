@@ -21,7 +21,7 @@ import AccountingLoads from './pages/accounting/AccountingLoads';
 import SettlementsHub from './pages/accounting/SettlementsHub';
 import Invoices from './pages/accounting/Invoices';
 import Payroll from './pages/accounting/Payroll';
-import TrackTrace from './pages/tracking/TrackTrace';
+import LiveMap from './pages/tracking/TrackTrace';
 import Assistants from './pages/Assistants';
 import Admin from './pages/admin/Admin';
 import Integrations from './pages/admin/Integrations';
@@ -82,7 +82,7 @@ export default function App() {
               <Route path="/accounting/invoices" element={<Invoices />} />
               <Route path="/accounting/payroll" element={<Payroll />} />
               <Route path="/accounting" element={<AccountingLoads />} />
-              <Route path="/tracking" element={<TrackTrace />} />
+              <Route path="/tracking" element={<LiveMap />} />
               <Route path="/assistants" element={<Assistants />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/integrations" element={<Integrations />} />
