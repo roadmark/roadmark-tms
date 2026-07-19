@@ -7,10 +7,10 @@ import { UNIT_STATUSES, OWNERSHIP, TRUCK_TYPES, TRAILER_TYPES } from '../../data
 import DeptFeed from '../../components/DeptFeed';
 import ImportWizard from '../accounting/ImportWizard';
 
-export default function Units() {
+export default function Units({ kind }) {
   const { companyId, canEdit, user } = useAuth();
   const qc = useQueryClient();
-  const [tab, setTab] = useState('trucks');
+  const [tab, setTab] = useState(kind || 'trucks');
   const [open, setOpen] = useState(null);
   const [importing, setImporting] = useState(false);
   const table = tab; // 'trucks' | 'trailers'
@@ -34,11 +34,13 @@ export default function Units() {
   return (
     <>
       <div className="page-head">
-        <h2>Trucks &amp; trailers</h2>
-        <div className="seg">
-          <button className={tab === 'trucks' ? 'on' : ''} onClick={() => setTab('trucks')}>Trucks</button>
-          <button className={tab === 'trailers' ? 'on' : ''} onClick={() => setTab('trailers')}>Trailers</button>
-        </div>
+        <h2>{tab === 'trucks' ? 'Trucks' : 'Trailers'}</h2>
+        {!kind && (
+          <div className="seg">
+            <button className={tab === 'trucks' ? 'on' : ''} onClick={() => setTab('trucks')}>Trucks</button>
+            <button className={tab === 'trailers' ? 'on' : ''} onClick={() => setTab('trailers')}>Trailers</button>
+          </div>
+        )}
         <div className="spacer" />
         {editable && <button className="btn btn-ghost" onClick={() => setImporting(true)}>Import CSV</button>}
         {editable && <button className="btn btn-primary" onClick={() => setOpen('new')}>Add {tab.slice(0, -1)}</button>}

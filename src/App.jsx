@@ -15,7 +15,11 @@ import Units from './pages/fleet/Units';
 import Assignments from './pages/fleet/Assignments';
 import Cases from './pages/fleet/Cases';
 import Maintenance from './pages/maintenance/Maintenance';
-import Accounting from './pages/accounting/Accounting';
+import Vendors from './pages/fleet/Vendors';
+import AccountingLoads from './pages/accounting/AccountingLoads';
+import SettlementsHub from './pages/accounting/SettlementsHub';
+import Invoices from './pages/accounting/Invoices';
+import Payroll from './pages/accounting/Payroll';
 import TrackTrace from './pages/tracking/TrackTrace';
 import Assistants from './pages/Assistants';
 import Admin from './pages/admin/Admin';
@@ -62,11 +66,19 @@ export default function App() {
               <Route path="/safety/drivers" element={<Drivers />} />
               <Route path="/safety/compliance" element={<Compliance />} />
               <Route path="/safety/insurance" element={<Insurance />} />
+              <Route path="/fleet/trucks" element={<Units kind="trucks" />} />
+              <Route path="/fleet/trailers" element={<Units kind="trailers" />} />
               <Route path="/fleet/units" element={<Units />} />
+              <Route path="/fleet/vendors" element={<Vendors />} />
               <Route path="/fleet/assignments" element={<Assignments />} />
               <Route path="/fleet/cases" element={<Cases />} />
               <Route path="/maintenance" element={<Maintenance />} />
-              <Route path="/accounting" element={<Accounting />} />
+              <Route path="/fleet/maintenance" element={<Maintenance />} />
+              <Route path="/accounting/loads" element={<AccountingLoads />} />
+              <Route path="/accounting/settlements" element={<SettlementsHub />} />
+              <Route path="/accounting/invoices" element={<Invoices />} />
+              <Route path="/accounting/payroll" element={<Payroll />} />
+              <Route path="/accounting" element={<AccountingLoads />} />
               <Route path="/tracking" element={<TrackTrace />} />
               <Route path="/assistants" element={<Assistants />} />
               <Route path="/admin" element={<Admin />} />

@@ -46,10 +46,10 @@ export default function Accounting() {
         )}
       </div>
 
-      {tab === 'overview' && <Overview companyId={companyId} />}
+      {tab === 'overview' && <BalancesOverview companyId={companyId} />}
       {tab === 'fuel' && <Charges kind="fuel" companyId={companyId} editable={editable} />}
       {tab === 'toll' && <Charges kind="toll" companyId={companyId} editable={editable} />}
-      {tab === 'deductions' && <Deductions companyId={companyId} />}
+      {tab === 'deductions' && <DeductionsTable companyId={companyId} />}
       {tab === 'settlements' && <Settlements />}
       {tab === 'invoices' && <Invoices />}
       {tab === 'payroll' && <Payroll />}
@@ -66,7 +66,7 @@ export default function Accounting() {
 
 /* ---------------- overview ---------------- */
 
-function Overview({ companyId }) {
+export function BalancesOverview({ companyId }) {
   const balances = useQuery({
     queryKey: ['balances', companyId],
     enabled: !!companyId,
@@ -138,7 +138,7 @@ function Money({ label, v }) {
 
 /* ---------------- fuel / toll tables ---------------- */
 
-function Charges({ kind, companyId, editable }) {
+export function Charges({ kind, companyId, editable }) {
   const table = kind === 'fuel' ? 'fuel_transactions' : 'toll_transactions';
   const qc = useQueryClient();
   const [status, setStatus] = useState('open');
@@ -292,7 +292,7 @@ function Charges({ kind, companyId, editable }) {
 
 /* ---------------- deductions ---------------- */
 
-function Deductions({ companyId }) {
+export function DeductionsTable({ companyId }) {
   const rows = useQuery({
     queryKey: ['deductions', companyId],
     enabled: !!companyId,

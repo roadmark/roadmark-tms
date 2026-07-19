@@ -7,29 +7,36 @@ import GlobalSearch from './GlobalSearch';
 import Notifications from './Notifications';
 
 const NAV = [
-  { section: 'Work', items: [
+  { section: '', items: [
     { to: '/', label: 'Overview', end: true },
+  ]},
+  { section: 'Dispatch', items: [
     { to: '/dispatch/board', label: 'Board', dept: 'dispatch' },
     { to: '/dispatch/loads', label: 'Loads', dept: 'dispatch' },
     { to: '/dispatch/activity', label: 'Trip activity', dept: 'dispatch' },
     { to: '/dispatch/customers', label: 'Customers', dept: 'dispatch' },
   ]},
-  { section: 'Fleet', items: [
-    { to: '/fleet/cases', label: 'Cases', dept: 'maintenance' },
-    { to: '/fleet/assignments', label: 'Assignments', dept: 'fleet' },
-    { to: '/fleet/units', label: 'Fleet data', dept: 'fleet' },
-    { to: '/maintenance', label: 'Maintenance', dept: 'maintenance' },
-    { to: '/tracking', label: 'Live map', dept: 'tracking' },
-  ]},
-  { section: 'Money', items: [
-    { to: '/accounting', label: 'Accounting', dept: 'accounting' },
+  { section: 'Accounting', items: [
+    { to: '/accounting/loads', label: 'Loads', dept: 'accounting' },
+    { to: '/accounting/settlements', label: 'Settlements', dept: 'accounting' },
   ]},
   { section: 'Safety', items: [
     { to: '/safety/drivers', label: 'Drivers', dept: 'safety' },
-    { to: '/safety/compliance', label: 'Compliance', dept: 'safety' },
     { to: '/safety/insurance', label: 'Insurance', dept: 'safety' },
+    { to: '/safety/compliance', label: 'Compliance', dept: 'safety' },
+  ]},
+  { section: 'Fleet', items: [
+    { to: '/fleet/trucks', label: 'Trucks', dept: 'fleet' },
+    { to: '/fleet/trailers', label: 'Trailers', dept: 'fleet' },
+    { to: '/fleet/maintenance', label: 'Maintenance history', dept: 'maintenance' },
+    { to: '/fleet/vendors', label: 'Maintenance vendors', dept: 'maintenance' },
   ]},
   { section: 'Admin', items: [
+    { to: '/fleet/cases', label: 'Repair cases', dept: 'maintenance' },
+    { to: '/fleet/assignments', label: 'Assignments', dept: 'fleet' },
+    { to: '/tracking', label: 'Live map', dept: 'tracking' },
+    { to: '/accounting/invoices', label: 'Invoices', dept: 'accounting' },
+    { to: '/accounting/payroll', label: 'Payroll', dept: 'accounting' },
     { to: '/assistants', label: 'Assistants' },
     { to: '/admin', label: 'Company & users' },
     { to: '/admin/integrations', label: 'ELD' },
@@ -41,9 +48,12 @@ const NAV = [
 const TITLES = {
   '/': 'Overview', '/dispatch/board': 'Dispatch board', '/dispatch/loads': 'Loads',
   '/dispatch/activity': 'Trip activity', '/dispatch/customers': 'Customers',
-  '/fleet/cases': 'Cases', '/fleet/assignments': 'Assignments', '/fleet/units': 'Fleet data',
-  '/maintenance': 'Maintenance', '/tracking': 'Live map', '/accounting': 'Accounting',
-  '/safety/drivers': 'Drivers', '/safety/compliance': 'Compliance', '/safety/insurance': 'Insurance',
+  '/accounting/loads': 'Accounting · Loads', '/accounting/settlements': 'Settlements',
+  '/accounting/invoices': 'Invoices', '/accounting/payroll': 'Payroll',
+  '/safety/drivers': 'Drivers', '/safety/insurance': 'Insurance', '/safety/compliance': 'Compliance',
+  '/fleet/trucks': 'Trucks', '/fleet/trailers': 'Trailers',
+  '/fleet/maintenance': 'Maintenance history', '/fleet/vendors': 'Maintenance vendors',
+  '/fleet/cases': 'Repair cases', '/fleet/assignments': 'Assignments', '/tracking': 'Live map',
   '/assistants': 'Assistants', '/admin': 'Company & users', '/admin/integrations': 'ELD & integrations',
   '/admin/assistants': 'Telegram setup', '/admin/email': 'Broker email',
 };
@@ -85,7 +95,7 @@ export default function Layout() {
         <nav className="nav">
           {NAV.map((s) => (
             <div key={s.section}>
-              <div className="nav-section">{s.section}</div>
+              {s.section && <div className="nav-section">{s.section}</div>}
               {s.items.map((i) => (
                 <NavLink key={i.to} to={i.to} end={i.end}
                   className={({ isActive }) => (isActive ? 'active' : '')}>
