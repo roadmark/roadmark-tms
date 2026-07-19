@@ -53,6 +53,20 @@ export default function Overview() {
     },
   });
 
+  const alerts = useQuery({
+    queryKey: ['compliance-alerts', companyId],
+    enabled: !!companyId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('compliance_items')
+        .select('id, entity_type, entity_id, expiry_date, type:compliance_types(code, name)')
+        .eq('company_id', companyId).not('expiry_date', 'is', null)
+        .lte('expiry_date', new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10))
+        .order('expiry_date').limit(10);
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const s = stats.data;
   return (
     <>
@@ -65,6 +79,31 @@ export default function Overview() {
         <StatCard label="Loads in progress" value={s?.loadsActive} />
         <StatCard label="Loads scheduled" value={s?.loadsScheduled} />
       </div>
+
+      {(alerts.data || []).length > 0 && (
+        <div className="card" style={{ marginBottom: 18, borderLeft: '3px solid var(--safety)' }}>
+          <div className="card-pad">
+            <h2 style={{ fontSize: 16, margin: '0 0 8px', fontFamily: 'var(--font-display)' }}>
+              Compliance needing attention
+            </h2>
+            {alerts.data.map((a) => {
+              const days = Math.floor((new Date(a.expiry_date) - new Date()) / 86400000);
+              return (
+                <div className="feed-item" key={a.id}>
+                  <div className="feed-rail" style={{ background: days < 0 ? 'var(--danger)' : '#f59e0b' }} />
+                  <div style={{ flex: 1 }}>
+                    <div className="feed-title">{a.type?.code} — {a.type?.name}</div>
+                    <div className="feed-meta">{a.entity_type} · expires {a.expiry_date}</div>
+                  </div>
+                  <span className={`chip ${days < 0 ? 'red' : 'yellow'}`}>
+                    {days < 0 ? `${Math.abs(days)} days overdue` : `${days} days left`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-pad">

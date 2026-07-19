@@ -7,6 +7,8 @@ import Overview from './pages/Overview';
 import Loads from './pages/dispatch/Loads';
 import Customers from './pages/dispatch/Customers';
 import Drivers from './pages/safety/Drivers';
+import Compliance from './pages/safety/Compliance';
+import Insurance from './pages/safety/Insurance';
 import Units from './pages/fleet/Units';
 import Assignments from './pages/fleet/Assignments';
 import Maintenance from './pages/maintenance/Maintenance';
@@ -50,6 +52,8 @@ export default function App() {
               <Route path="/dispatch/loads" element={<Loads />} />
               <Route path="/dispatch/customers" element={<Customers />} />
               <Route path="/safety/drivers" element={<Drivers />} />
+              <Route path="/safety/compliance" element={<Compliance />} />
+              <Route path="/safety/insurance" element={<Insurance />} />
               <Route path="/fleet/units" element={<Units />} />
               <Route path="/fleet/assignments" element={<Assignments />} />
               <Route path="/maintenance" element={<Maintenance />} />
