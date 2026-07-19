@@ -8,6 +8,8 @@ import { downloadCsv } from '../../lib/csv';
 import DeptFeed from '../../components/DeptFeed';
 import ImportWizard from './ImportWizard';
 import Settlements from './Settlements';
+import Invoices from './Invoices';
+import Payroll from './Payroll';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -15,6 +17,8 @@ const TABS = [
   { id: 'toll', label: 'Tolls' },
   { id: 'deductions', label: 'Deductions' },
   { id: 'settlements', label: 'Settlements' },
+  { id: 'invoices', label: 'Invoices' },
+  { id: 'payroll', label: 'Payroll' },
 ];
 
 export default function Accounting() {
@@ -45,6 +49,8 @@ export default function Accounting() {
       {tab === 'toll' && <Charges kind="toll" companyId={companyId} editable={editable} />}
       {tab === 'deductions' && <Deductions companyId={companyId} />}
       {tab === 'settlements' && <Settlements />}
+      {tab === 'invoices' && <Invoices />}
+      {tab === 'payroll' && <Payroll />}
 
       <div style={{ marginTop: 16 }}><DeptFeed dept="accounting" /></div>
 
