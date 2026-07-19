@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -21,14 +21,17 @@ export const PLACE_STYLE = {
 };
 
 /** Live fleet map: truck markers, place pins, and click-to-drop. */
+const MAX_MARKERS = 700;   // Leaflet stays smooth well under this
+
 export default function FleetMap({
   trucks = [], places = [], height = 520,
-  onSelectTruck, onSelectPlace, dropMode = false, onDropPin,
+  onSelectTruck, onSelectPlace, dropMode = false, onDropPin, onVisibleChange,
 }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const truckLayer = useRef(null);
   const placeLayer = useRef(null);
+  const [bounds, setBounds] = useState(null);
   const dropRef = useRef({ dropMode, onDropPin });
   dropRef.current = { dropMode, onDropPin };
 
@@ -45,6 +48,9 @@ export default function FleetMap({
       const { dropMode: dm, onDropPin: fn } = dropRef.current;
       if (dm && fn) fn({ lat: e.latlng.lat, lng: e.latlng.lng });
     });
+    const sync = () => setBounds(map.getBounds());
+    map.on('moveend zoomend', sync);
+    sync();
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
   }, []);
@@ -54,12 +60,29 @@ export default function FleetMap({
     if (elRef.current) elRef.current.style.cursor = dropMode ? 'crosshair' : '';
   }, [dropMode]);
 
+  // only draw the pins actually in view — a national directory is far too many at once
+  const visible = useMemo(() => {
+    const withCoords = places.filter((p) => typeof p.lat === 'number' && typeof p.lng === 'number');
+    if (!bounds) return withCoords.slice(0, MAX_MARKERS);
+    const inView = withCoords.filter((p) => bounds.contains([p.lat, p.lng]));
+    // company pins always win a slot
+    const ours = inView.filter((p) => p.company_id);
+    const rest = inView.filter((p) => !p.company_id);
+    return [...ours, ...rest].slice(0, MAX_MARKERS);
+  }, [places, bounds]);
+
+  useEffect(() => {
+    if (!onVisibleChange || !bounds) return;
+    const inView = places.filter((p) => typeof p.lat === 'number' && bounds.contains([p.lat, p.lng])).length;
+    onVisibleChange({ shown: Math.min(inView, MAX_MARKERS), inView, total: places.length });
+  }, [visible, bounds, places, onVisibleChange]);
+
   // places
   useEffect(() => {
     const layer = placeLayer.current;
     if (!layer) return;
     layer.clearLayers();
-    places.forEach((p) => {
+    visible.forEach((p) => {
       if (typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
       const st = PLACE_STYLE[p.kind] || PLACE_STYLE.other;
       const ring = p.company_id ? '#f2a93b' : 'rgba(255,255,255,.65)';
@@ -80,7 +103,7 @@ export default function FleetMap({
       );
       if (onSelectPlace) m.on('click', () => onSelectPlace(p));
     });
-  }, [places, onSelectPlace]);
+  }, [visible, onSelectPlace]);
 
   // trucks
   useEffect(() => {

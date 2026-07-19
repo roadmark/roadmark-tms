@@ -18,6 +18,9 @@ export default function LiveMap() {
   const [dropMode, setDropMode] = useState(false);
   const [newPin, setNewPin] = useState(null);
   const [layers, setLayers] = useState({ trucks: true, directory: true, ours: true, preferredOnly: false });
+  const [kinds, setKinds] = useState(null);        // null = all
+  const [kindMenu, setKindMenu] = useState(false);
+  const [viewInfo, setViewInfo] = useState(null);
   const [syncMsg, setSyncMsg] = useState(null);
 
   const fleet = useQuery({
@@ -50,15 +53,22 @@ export default function LiveMap() {
     },
   });
 
+  // Supabase caps a single request at 1000 rows, so page through the directory
   const places = useQuery({
     queryKey: ['map-places', companyId],
     enabled: !!companyId,
     queryFn: async () => {
-      const { data, error } = await supabase.from('map_places')
-        .select('*').or(`company_id.is.null,company_id.eq.${companyId}`)
-        .neq('status', 'archived').limit(6000);
-      if (error) throw error;
-      return data;
+      const out = [];
+      for (let from = 0; from < 20000; from += 1000) {
+        const { data, error } = await supabase.from('map_places')
+          .select('*').or(`company_id.is.null,company_id.eq.${companyId}`)
+          .neq('status', 'archived')
+          .order('id').range(from, from + 999);
+        if (error) throw error;
+        out.push(...data);
+        if (data.length < 1000) break;
+      }
+      return out;
     },
   });
 
@@ -88,10 +98,26 @@ export default function LiveMap() {
       if (!isOurs && !layers.directory) return false;
       if (!isOurs && layers.preferredOnly && !p.preferred) return false;
       if (p.blacklisted && !layers.ours) return false;
+      if (kinds && !kinds.has(p.kind)) return false;
       return true;
     });
     return list;
-  }, [places.data, layers]);
+  }, [places.data, layers, kinds]);
+
+  // what kinds actually exist, with counts
+  const kindCounts = useMemo(() => {
+    const m = {};
+    (places.data || []).forEach((p) => { m[p.kind] = (m[p.kind] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [places.data]);
+  const toggleKind = (k) => {
+    setKinds((cur) => {
+      const all = new Set(kindCounts.map(([x]) => x));
+      const next = new Set(cur ?? all);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      return next.size === all.size ? null : next;
+    });
+  };
 
   const positioned = fleet.data?.positioned || [];
   const silent = fleet.data?.silent || [];
@@ -142,20 +168,61 @@ export default function LiveMap() {
           onSelectPlace={setPlace}
           dropMode={dropMode}
           onDropPin={(coords) => { setNewPin(coords); setDropMode(false); }}
+          onVisibleChange={setViewInfo}
         />
       </div>
 
       <div className="filter-row" style={{ marginBottom: 16 }}>
-        {[...DIRECTORY, ...OURS].map((k) => {
-          const st = PLACE_STYLE[k];
-          const n = (places.data || []).filter((p) => p.kind === k).length;
-          if (!n) return null;
+        <div style={{ position: 'relative' }}>
+          <button className="btn btn-ghost" onClick={() => setKindMenu((v) => !v)}>
+            ☰ Pin types {kinds ? `(${kinds.size} of ${kindCounts.length})` : `(all ${kindCounts.length})`}
+          </button>
+          {kindMenu && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 30 }} onClick={() => setKindMenu(false)} />
+              <div className="card" style={{ position: 'absolute', top: 40, left: 0, width: 268,
+                zIndex: 31, padding: 10, maxHeight: 380, overflowY: 'auto' }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                  <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={() => setKinds(null)}>All</button>
+                  <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={() => setKinds(new Set())}>None</button>
+                </div>
+                {kindCounts.map(([k, n]) => {
+                  const st = PLACE_STYLE[k] || PLACE_STYLE.other;
+                  const on = !kinds || kinds.has(k);
+                  return (
+                    <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '6px 4px', cursor: 'pointer', fontSize: 13 }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleKind(k)} />
+                      <span style={{ width: 20 }}>{st.icon}</span>
+                      <span style={{ flex: 1 }}>{st.label}</span>
+                      <b className="num" style={{ fontSize: 12 }}>{n.toLocaleString()}</b>
+                    </label>
+                  );
+                })}
+                {kindCounts.length === 0 && <div className="small muted">No pins yet — run the sync.</div>}
+              </div>
+            </>
+          )}
+        </div>
+        {kindCounts.slice(0, 6).map(([k, n]) => {
+          const st = PLACE_STYLE[k] || PLACE_STYLE.other;
+          const on = !kinds || kinds.has(k);
           return (
-            <span key={k} className="chip gray nodot" style={{ gap: 6 }}>
-              <span>{st.icon}</span>{st.label} <b>{n}</b>
+            <span key={k} className={`chip ${on ? 'amber' : 'gray'} nodot`}
+              style={{ gap: 6, cursor: 'pointer' }} onClick={() => toggleKind(k)}>
+              <span>{st.icon}</span>{st.label} <b>{n.toLocaleString()}</b>
             </span>
           );
         })}
+        <div style={{ flex: 1 }} />
+        {viewInfo && (
+          <span className="small muted">
+            showing {viewInfo.shown.toLocaleString()} of {viewInfo.inView.toLocaleString()} in view
+            {viewInfo.inView > viewInfo.shown ? ' — zoom in for the rest' : ''}
+          </span>
+        )}
       </div>
 
       {selected && (

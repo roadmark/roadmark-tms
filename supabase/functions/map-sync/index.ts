@@ -3,8 +3,14 @@
 //
 // Secrets:
 //   ROADMARK_URL           https://<roadmark-project>.supabase.co
-//   ROADMARK_ANON_KEY      Roadmark's anon key (the shop directory is public, so read
-//                          access needs nothing more)
+//   ROADMARK_ANON_KEY      Roadmark's anon key
+//
+//   Roadmark's shop directory is gated behind login, so the sync has to authenticate.
+//   Pick ONE of these — the first is recommended (least privilege):
+//   ROADMARK_EMAIL         a dedicated Roadmark account, e.g. tms-sync@yourcompany.com
+//   ROADMARK_PASSWORD      its password
+//     …or…
+//   ROADMARK_SERVICE_KEY   Roadmark's service_role key (bypasses RLS entirely)
 //   ROADMARK_SUBMIT_URL    (optional) endpoint that accepts a user-submitted place;
 //                          without it, TMS pins stay local
 //   ROADMARK_SUBMIT_KEY    (optional) bearer token for that endpoint
@@ -137,42 +143,73 @@ Deno.serve(async (req) => {
       if (!rmUrl || !rmKey) {
         report.pull = 'skipped — ROADMARK_URL / ROADMARK_ANON_KEY not set';
       } else {
-        const rm = createClient(rmUrl, rmKey);
+        // Authenticate however we've been configured. Anonymous still works for
+        // tables that carry a public read policy (parking, for instance).
+        const svcKey = Deno.env.get('ROADMARK_SERVICE_KEY');
+        const email = Deno.env.get('ROADMARK_EMAIL');
+        const password = Deno.env.get('ROADMARK_PASSWORD');
+        let authMode = 'anonymous';
+        const rm = svcKey
+          ? createClient(rmUrl, svcKey)
+          : createClient(rmUrl, rmKey, { auth: { persistSession: false } });
+
+        if (svcKey) {
+          authMode = 'service_role';
+        } else if (email && password) {
+          const { error: authErr } = await rm.auth.signInWithPassword({ email, password });
+          if (authErr) {
+            report.pull = `sign-in to Roadmark failed: ${authErr.message}`;
+            return json({ ok: false, ...report });
+          }
+          authMode = `signed in as ${email}`;
+        }
+        report.auth = authMode;
         const { data: state } = await admin.from('map_sync_state')
           .select('*').eq('source', 'roadmark').maybeSingle();
         const since = full ? null : state?.last_synced_at;
 
         let pulled = 0, skipped = 0;
         const errors: string[] = [];
+        const perTable: Record<string, number> = {};
 
         for (const t of tables) {
           try {
-            const build = (useSince: boolean) => {
-              let q = rm.from(t.name).select('*').limit(10000);
+            const build = (useSince: boolean, from = 0) => {
+              let q = rm.from(t.name).select('*').order('id').range(from, from + 999);
               // only take rows this table considers live, when a status filter is given
               if (t.status_in?.length) q = q.in('status', t.status_in);
               else if (t.status) q = q.eq('status', t.status);
               if (useSince && since) q = q.gt('updated_at', since);
               return q;
             };
-            let { data, error } = await build(true);
-            // tables without an updated_at column can't do incremental — fall back to full
-            if (error && /updated_at/i.test(error.message || '')) {
-              ({ data, error } = await build(false));
-            }
-            if (error) { errors.push(`${t.name}: ${error.message}`); continue; }
+            // Roadmark's API caps a request at 1000 rows — page through the whole table
+            let useSince = true, page = 0, tableCount = 0;
+            for (;;) {
+              let { data, error } = await build(useSince, page * 1000);
+              // tables without updated_at can't do incremental — fall back to a full pull
+              if (error && /updated_at/i.test(error.message || '')) {
+                useSince = false;
+                ({ data, error } = await build(false, page * 1000));
+              }
+              if (error) { errors.push(`${t.name}: ${error.message}`); break; }
+              if (!data?.length) break;
 
-            const rows = (data ?? []).map((r: any) => normalize(r, t.kind)).filter(Boolean);
-            skipped += (data?.length ?? 0) - rows.length;
+              const rows = data.map((r: any) => normalize(r, t.kind)).filter(Boolean);
+              skipped += data.length - rows.length;
 
-            for (let i = 0; i < rows.length; i += 300) {
-              const chunk = rows.slice(i, i + 300).filter((r: any) => r.external_id);
-              if (!chunk.length) continue;
-              const { error: upErr } = await admin.from('map_places')
-                .upsert(chunk, { onConflict: 'source,external_id' });
-              if (upErr) { errors.push(`${t.name} upsert: ${upErr.message}`); break; }
-              pulled += chunk.length;
+              for (let i = 0; i < rows.length; i += 300) {
+                const chunk = rows.slice(i, i + 300).filter((r: any) => r.external_id);
+                if (!chunk.length) continue;
+                const { error: upErr } = await admin.from('map_places')
+                  .upsert(chunk, { onConflict: 'source,external_id' });
+                if (upErr) { errors.push(`${t.name} upsert: ${upErr.message}`); break; }
+                pulled += chunk.length; tableCount += chunk.length;
+              }
+              if (data.length < 1000) break;
+              page++;
+              if (page > 40) break;                    // 40k rows is plenty of rope
             }
+            perTable[t.name] = tableCount;
           } catch (e) { errors.push(`${t.name}: ${String(e).slice(0, 120)}`); }
         }
 
@@ -182,7 +219,7 @@ Deno.serve(async (req) => {
           rows_seen: pulled,
           last_error: errors.length ? errors.join(' · ').slice(0, 500) : null,
         });
-        report.pull = { pulled, skipped_no_coords: skipped, errors };
+        report.pull = { pulled, per_table: perTable, skipped_no_coords: skipped, errors };
       }
     }
 
